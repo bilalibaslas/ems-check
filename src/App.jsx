@@ -267,6 +267,109 @@ function CheckPage({ myRole, selYear, selMonth, selDay, selShift, equipment }) {
   );
 }
 
+
+/* -- Summary Page -- */
+function SummaryPage({ selYear, selMonth, equipment, onLock }) {
+  const [allData,setAllData]=useState({}); const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    setLoading(true);
+    const u=onValue(ref(db,"records"),snap=>{
+      const raw=snap.val()||{};
+      const f=Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(`${selYear}-${String(selMonth+1).padStart(2,"0")}`)));
+      setAllData(f); setLoading(false);
+    });
+    return()=>u();
+  },[selYear,selMonth]);
+
+  const days=getDays(selYear,selMonth);
+  const rows=[];
+  for(let d=1;d<=days;d++){
+    for(const shift of SHIFTS){
+      const roleResults=ROLES.map(r=>{
+        const k=recKey(selYear,selMonth,d,shift,r.id);
+        const e=allData[k]; const its=equipment[r.id]||[];
+        const done=e?Object.values(e.checked||{}).filter(Boolean).length:0;
+        return{role:r,entry:e,done,total:its.length};
+      });
+      const allOK=roleResults.every(r=>r.entry&&r.entry.name&&r.done===r.total&&r.total>0);
+      if(!allOK) rows.push({day:d,shift,roleResults});
+    }
+  }
+
+  const copyText=
+    "สรุปเวรที่ไม่ได้เช็คอุปกรณ์ EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+String(selYear+543)+"\n"+
+    "─".repeat(36)+"\n"+
+    rows.map(({day,shift,roleResults})=>{
+      const missing=roleResults.filter(r=>!r.entry||!r.entry.name||r.done<r.total);
+      return "* "+day+" "+MONTH_NAMES[selMonth]+" เวร"+shift+"\n"+
+        missing.map(r=>"  - "+r.role.short+": "+(r.entry?.name||"ไม่มีชื่อ")+" ["+r.done+"/"+r.total+"]").join("\n");
+    }).join("\n")+
+    "\n"+"─".repeat(36)+"\nรวม "+rows.length+" เวร";
+
+  if(loading) return React.createElement("div",{style:{textAlign:"center",padding:60,color:"#64748b"}},
+    React.createElement("div",{style:{fontSize:32,marginBottom:12}},"⏳"),"กำลังโหลด...");
+
+  return (
+    <div>
+      <Card>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>{"📋 สรุปเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)}</div>
+            <div style={{fontSize:13,color:"#94a3b8"}}>เวรที่ยังเช็คไม่ครบ</div>
+          </div>
+          <button onClick={onLock} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"rgba(251,191,36,0.15)",color:"#fbbf24"}}>🔒 ล็อค</button>
+        </div>
+      </Card>
+      {rows.length===0?(
+        <div style={{background:"rgba(74,222,128,0.1)",border:"1.5px solid #4ade8055",borderRadius:14,padding:36,textAlign:"center"}}>
+          <div style={{fontSize:44,marginBottom:10}}>✅</div>
+          <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>ครบทุกเวรแล้วค่ะ!</div>
+        </div>
+      ):(
+        <>
+          <div style={{background:"rgba(239,68,68,0.1)",border:"1.5px solid #ef444455",borderRadius:10,padding:"12px 16px",marginBottom:14,fontSize:14}}>
+            ⚠️ พบ <strong>{rows.length}</strong> เวร ที่ยังไม่สมบูรณ์
+          </div>
+          {rows.map(({day,shift,roleResults},idx)=>{
+            const sm=SHIFT_META[shift];
+            return(
+              <Card key={idx} style={{marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                  <div style={{padding:"4px 12px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.accent+"22",color:sm.accent}}>
+                    {sm.icon+" "+day+" "+MONTH_NAMES[selMonth].slice(0,3)+" · เวร"+shift}
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {roleResults.map(r=>{
+                    const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
+                    return(
+                      <div key={r.role.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:ok?"rgba(74,222,128,0.06)":"rgba(239,68,68,0.06)",border:"1px solid "+(ok?"#4ade8033":"#ef444433")}}>
+                        <span style={{fontSize:18}}>{r.role.icon}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,fontWeight:700,color:r.role.color}}>{r.role.short}</div>
+                          <div style={{fontSize:12,color:"#94a3b8"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
+                        </div>
+                        <div style={{fontSize:12,color:ok?"#4ade80":"#f87171",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })}
+          <Card>
+            <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:10}}>📋 คัดลอกส่งหัวหน้า</div>
+            <div style={{background:"#0f172a",borderRadius:8,padding:14,fontSize:12,lineHeight:1.9,color:"#e2e8f0",fontFamily:"monospace",whiteSpace:"pre-wrap",marginBottom:12}}>{copyText}</div>
+            <button onClick={()=>navigator.clipboard.writeText(copyText)} style={{padding:"10px 22px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#3b82f6",color:"#fff"}}>
+              📋 คัดลอกข้อความ
+            </button>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ── Dashboard + Delete ── */
 function DashboardPage({ selYear, selMonth, equipment, onLock }) {
   const [allData,setAllData]=useState({}); const [loading,setLoading]=useState(true);
@@ -567,11 +670,12 @@ export default function App() {
   function handleLock(){setPinUnlocked(false);ss(PIN_SESSION_KEY,0);setView("check");}
 
   if(!myRole) return <RoleSelectScreen onSelect={selectRole}/>;
-  if((view==="dashboard"||view==="settings")&&!pinUnlocked) return <PinLockScreen onUnlock={handleUnlock}/>;
+  if((view==="dashboard"||view==="summary"||view==="settings")&&!pinUnlocked) return <PinLockScreen onUnlock={handleUnlock}/>;
 
   const role=ROLE_MAP[myRole];
   const TABS=[
     {id:"check",     label:"📋 บันทึก"},
+    {id:"summary",   label:"📋 สรุป 🔒"},
     {id:"dashboard", label:"📊 Dashboard 🔒"},
     {id:"settings",  label:"⚙️ ตั้งค่า 🔒"},
   ];
@@ -624,6 +728,7 @@ export default function App() {
           </div>
         )}
         {view==="check"     && <CheckPage     myRole={myRole} selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift} equipment={equipment}/>}
+        {view==="summary"   && <SummaryPage   selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="dashboard" && <DashboardPage selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="settings"  && <SettingsPage  myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
       </div>
