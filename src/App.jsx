@@ -14,7 +14,7 @@ import { getDatabase, ref, set, onValue } from "firebase-database";
 const firebaseConfig = {
   apiKey:            "AIzaSyCW_xpZq3nVeL86NUX5S8W1hbMSzdS4kpk",
   authDomain:        "ems-equipment-mnst.firebaseapp.com",
-  databaseURL:       "https:--ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
+  databaseURL:       "https://ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId:         "ems-equipment-mnst",
   storageBucket:     "ems-equipment-mnst.appspot.com",
   messagingSenderId: "917321944070",
