@@ -40,7 +40,7 @@ const SHIFT_META = {
 };
 
 const DEFAULT_EQUIPMENT = {
-  para: ["Defibrillator - AED","Oxygen Tank & Mask","BVM (Bag-Valve-Mask)","Suction Unit","Medications Box","BP Monitor - SpO2"],
+  para: ["Defibrillator - AED","Oxygen Tank & Mask","BVM Bag-Valve-Mask","Suction Unit","Medications Box","BP Monitor - SpO2"],
   aemt: ["Stretcher - Spine Board","Cervical Collar","Trauma Kit - Bandage","IV Set & Cannula"],
   driv: ["รถ EMS พร้อมใช้งาน","น้ำมันเพียงพอ","ไฟฉุกเฉิน - Siren","วิทยุสื่อสาร","อุปกรณ์นำทาง GPS"],
 };
