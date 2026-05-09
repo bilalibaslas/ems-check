@@ -428,6 +428,198 @@ const AEMT_GROUPS = [
   },
 ];
 
+
+/* ── พขร. grouped items ── */
+const DRIV_GROUPS = [
+  {
+    id:"equipment", label:"1. อุปกรณ์ในรถ", icon:"🚑", color:"#10b981",
+    items:[
+      {id:"infect_bin",   label:"ถังขยะติดเชื้อ",                hasExp:false, hasNote:false},
+      {id:"needle_bin",   label:"ถังทิ้งเข็ม",                   hasExp:false, hasNote:false},
+      {id:"o2_main1",     label:"ถังออกซิเจนใหญ่ ถัง 1",         hasExp:false, hasO2:true},
+      {id:"o2_main2",     label:"ถังออกซิเจนใหญ่ ถัง 2",         hasExp:false, hasO2:true},
+      {id:"o2_portable",  label:"ถังออกซิเจนเล็กพกพา",           hasExp:false, hasO2:true},
+    ]
+  },
+  {
+    id:"transfer", label:"2. อุปกรณ์ยกเคลื่อนย้าย", icon:"🛗", color:"#3b82f6",
+    items:[
+      {id:"stairchair",   label:"เก้าอี้ Stair chair",            hasExp:false, hasNote:false},
+      {id:"longboard",    label:"กระดาน Long spinal board",        hasExp:false, hasNote:false},
+      {id:"headimmo",     label:"หมอน Head immobilizer",           hasExp:false, hasNote:false},
+      {id:"belt3",        label:"Belt 3 เส้น",                    hasExp:false, hasNote:false},
+    ]
+  },
+  {
+    id:"car", label:"3. ความพร้อมของรถ", icon:"🚗", color:"#f59e0b",
+    items:[
+      {id:"engine_oil",   label:"น้ำมันเครื่อง",                  hasExp:false, hasNote:false},
+      {id:"fuel",         label:"น้ำมันเชื้อเพลิง",               hasExp:false, hasNote:false},
+      {id:"tire",         label:"ลมยาง",                          hasExp:false, hasNote:false},
+      {id:"lights",       label:"ไฟรอบคัน",                       hasExp:false, hasNote:false},
+      {id:"spotlight",    label:"ไฟ Spotlight",                   hasExp:false, hasNote:false},
+      {id:"coolant",      label:"น้ำหล่อเย็น",                    hasExp:false, hasNote:false},
+      {id:"wiper",        label:"น้ำปัดน้ำฝน",                    hasExp:false, hasNote:false},
+      {id:"battery",      label:"แบตเตอรี่",                       hasExp:false, hasNote:false},
+      {id:"clean",        label:"ความสะอาด",                       hasExp:false, hasNote:false},
+      {id:"scratch",      label:"รอยเฉี่ยวรอบคัน",                hasExp:false, hasNote:true},
+    ]
+  },
+];
+
+/* ── พขร. Check Page ── */
+function DrivCheckPage({selYear,selMonth,selDay,selShift}){
+  const role=ROLE_MAP["driv"]; const shiftMeta=SHIFT_META[selShift];
+  const key=recKey(selYear,selMonth,selDay,selShift,"driv");
+  const dbRef=ref(db,`records/${key}`);
+  const [myName,setMyName]=useState(""); const [checked,setChecked]=useState({});
+  const [note,setNote]=useState(""); const [o2Levels,setO2Levels]=useState({});
+  const [scratchNote,setScratchNote]=useState("");
+  const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
+  const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
+  const [noteError,setNoteError]=useState(false);
+
+  const totalItems=DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
+  const doneItems=DRIV_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
+
+  useEffect(()=>{
+    setLoading(true);
+    if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
+    const u=onValue(dbRef,snap=>{
+      const data=snap.val();
+      if(data){
+        setMyName(data.name||"");setChecked(data.checked||{});
+        setNote(data.note||"");setO2Levels(data.o2Levels||{});
+        setScratchNote(data.scratchNote||"");
+        if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
+      } else {setMyName("");setChecked({});setNote("");setO2Levels({});setScratchNote("");}
+      setLoading(false);setSaved(false);
+    });
+    return()=>u();
+  },[key]);
+
+  function toggle(id){setChecked(p=>({...p,[id]:!p[id]}));setSaved(false);}
+  function setO2(id,val){setO2Levels(p=>({...p,[id]:val}));setSaved(false);}
+
+  async function handleSave(){
+    if(!note.trim()){setNoteError(true);return;}
+    setNoteError(false);setSaving(true);
+    await set(dbRef,{name:myName,checked,note,o2Levels,scratchNote,roleId:"driv",savedAt:new Date().toISOString()});
+    setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
+  }
+
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+
+  return(
+    <div>
+      <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
+        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
+      </div>
+      {warn==="future"&&(
+        <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #ef444466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+          <span style={{fontSize:20}}>⚠️</span>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#94a3b8"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
+        </div>
+      )}
+      {warn==="duplicate"&&!saved&&(
+        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+          <span style={{fontSize:20}}>📋</span>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#94a3b8"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
+        </div>
+      )}
+      <Card>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <span style={{fontSize:26}}>{role.icon}</span>
+          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#64748b"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
+        </div>
+        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
+      </Card>
+      <Card style={{paddingBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#94a3b8"}}>ความคืบหน้าทั้งหมด</span>
+          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#4ade80":"#f59e0b"}}>{doneItems}/{totalItems}</span>
+        </div>
+        <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#4ade80)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
+        </div>
+      </Card>
+
+      {DRIV_GROUPS.map(group=>{
+        const groupDone=group.items.filter(item=>checked[item.id]).length;
+        return(
+          <Card key={group.id} style={{border:`1.5px solid ${group.color}33`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <span style={{fontSize:22}}>{group.icon}</span>
+              <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:group.color}}>{group.label}</div></div>
+              <span style={{fontSize:12,color:groupDone===group.items.length?"#4ade80":"#f59e0b",fontWeight:700}}>{groupDone}/{group.items.length}</span>
+            </div>
+            {group.items.map(item=>{
+              const ck=!!checked[item.id];
+              const o2Val=o2Levels[item.id]||"";
+              const o2Num=parseInt(o2Val)||0;
+              const o2Low=o2Val&&o2Num<500;
+              return(
+                <div key={item.id}>
+                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(74,222,128,0.08)":"transparent",transition:"background 0.15s"}}>
+                    <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
+                    <span style={{fontSize:14,color:ck?"#4ade80":"#cbd5e1",flex:1}}>{item.label}</span>
+                    {ck&&!item.hasO2&&<span style={{color:"#4ade80",fontSize:13}}>✓</span>}
+                  </label>
+
+                  {/* O2 level input */}
+                  {item.hasO2&&ck&&(
+                    <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:`1px solid ${o2Low?"#ef444466":"rgba(255,255,255,0.1)"}`}}>
+                      <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>💨 ปริมาณ O₂ ที่เหลือ (PSI หรือ Bar)</div>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <input type="number" min="0" max="2000" value={o2Val}
+                          onChange={e=>setO2(item.id,e.target.value)}
+                          placeholder="เช่น 1500"
+                          style={{...BASE_INP,width:140,padding:"8px 12px",fontSize:14}}/>
+                        <span style={{fontSize:13,color:"#64748b"}}>PSI</span>
+                      </div>
+                      {o2Val&&(
+                        <div style={{marginTop:6,fontSize:12,fontWeight:700,color:o2Low?"#ef4444":"#4ade80"}}>
+                          {o2Low?"🚨 ออกซิเจนต่ำกว่า 500 PSI! กรุณาเติมก่อนออกปฏิบัติการ":"✓ ปริมาณออกซิเจนปกติ"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Scratch note */}
+                  {item.hasNote&&ck&&(
+                    <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)"}}>
+                      <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>📝 ระบุตำแหน่งรอยเฉี่ยว (ถ้ามี)</div>
+                      <input value={scratchNote} onChange={e=>{setScratchNote(e.target.value);setSaved(false);}}
+                        placeholder='เช่น "ไม่มี" หรือ "ประตูหน้าซ้ายมีรอยขีด"'
+                        style={{...BASE_INP,padding:"8px 12px",fontSize:13}}/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </Card>
+        );
+      })}
+
+      <Card style={{border:noteError?"1.5px solid #ef4444":"undefined"}}>
+        <div style={{fontSize:13,fontWeight:700,color:noteError?"#f87171":"#94a3b8",marginBottom:6}}>
+          📝 เขียนปัญหาหรือข้อเสนอแนะทุกครั้ง หากไม่มีเขียน "ไม่มี" ได้เลย
+          <span style={{color:"#ef4444"}}> *</span>
+        </div>
+        {noteError&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
+        <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);setNoteError(false);}}
+          placeholder='เช่น "ไม่มี" หรือ "น้ำมันเชื้อเพลิงเหลือน้อย"'
+          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #ef4444":BASE_INP.border}}/>
+      </Card>
+
+      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
+        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
+      </button>
+    </div>
+  );
+}
+
 /* ── AEMT Check Page ── */
 function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   const role=ROLE_MAP["aemt"]; const shiftMeta=SHIFT_META[selShift];
@@ -676,6 +868,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
   function getTotal(roleId){
     if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
     if(roleId==="aemt") return AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    if(roleId==="driv") return DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
     return (equipment[roleId]||[]).length;
   }
   function getDone(e){ return e?Object.values(e.checked||{}).filter(Boolean).length:0; }
@@ -983,14 +1176,14 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
             <div style={{fontSize:13,color:"#94a3b8"}}>สำหรับ {role.label}</div>
           </div>
         </div>
-        {(myRole==="para"||myRole==="aemt")&&(
-          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(59,130,246,0.1)",borderRadius:8,fontSize:13,color:"#93c5fd"}}>
-            ℹ️ {myRole==="para"?"Para/RN":"AEMT"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
+        {(myRole==="para"||myRole==="aemt"||myRole==="driv")&&(
+          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(16,185,129,0.1)",borderRadius:8,fontSize:13,color:"#6ee7b7"}}>
+            ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"พขร."} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
           </div>
         )}
       </Card>
 
-      {myRole!=="para"&&myRole!=="aemt"&&(
+      {myRole!=="para"&&myRole!=="aemt"&&myRole!=="driv"&&(
         <>
           <Card>
             {draft.map((item,i)=>(
@@ -1111,7 +1304,7 @@ export default function App(){
         )}
         {view==="check"&&myRole==="para"&&<ParaCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
         {view==="check"&&myRole==="aemt"&&<AemtCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
-        {view==="check"&&myRole==="driv"&&<CheckPage myRole={myRole} selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift} equipment={equipment}/>}
+        {view==="check"&&myRole==="driv"&&<DrivCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
         {view==="summary"  &&<SummaryPage   selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="dashboard"&&<DashboardPage selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="settings" &&<SettingsPage  myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
