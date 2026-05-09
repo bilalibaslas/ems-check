@@ -1,20 +1,20 @@
-/**
+-**
  * EMS Equipment Check — Firebase + PIN Protection
  * รพ.มหาราช นครศรีธรรมราช
  *
  * ติดตั้ง: npm install firebase
  * แก้ไข firebaseConfig ด้านล่าง
- */
+ *-
 
 import { useState, useEffect, useRef } from "react";
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue } from "firebase/database";
+import { initializeApp } from "firebase-app";
+import { getDatabase, ref, set, onValue } from "firebase-database";
 
-/* ─── Firebase Config ─── */
+-* ─── Firebase Config ─── *-
 const firebaseConfig = {
   apiKey:            "YOUR_API_KEY",
   authDomain:        "ems-equipment-mnst.firebaseapp.com",
-  databaseURL:       "https://ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
+  databaseURL:       "https:--ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId:         "ems-equipment-mnst",
   storageBucket:     "ems-equipment-mnst.appspot.com",
   messagingSenderId: "YOUR_SENDER_ID",
@@ -24,9 +24,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-/* ─── Constants ─── */
+-* ─── Constants ─── *-
 const ROLES = [
-  { id:"para", label:"Paramedic / ENP / RN", short:"Para/RN", icon:"🩺", color:"#ef4444" },
+  { id:"para", label:"Paramedic - ENP - RN", short:"Para-RN", icon:"🩺", color:"#ef4444" },
   { id:"aemt", label:"AEMT",                  short:"AEMT",    icon:"🚑", color:"#3b82f6" },
   { id:"driv", label:"พขร.",                  short:"พขร.",    icon:"🚗", color:"#10b981" },
 ];
@@ -40,18 +40,18 @@ const SHIFT_META = {
 };
 
 const DEFAULT_EQUIPMENT = {
-  para: ["Defibrillator / AED","Oxygen Tank & Mask","BVM (Bag-Valve-Mask)","Suction Unit","Medications Box","BP Monitor / SpO2"],
-  aemt: ["Stretcher / Spine Board","Cervical Collar","Trauma Kit / Bandage","IV Set & Cannula"],
-  driv: ["รถ EMS พร้อมใช้งาน","น้ำมันเพียงพอ","ไฟฉุกเฉิน / Siren","วิทยุสื่อสาร","อุปกรณ์นำทาง GPS"],
+  para: ["Defibrillator - AED","Oxygen Tank & Mask","BVM (Bag-Valve-Mask)","Suction Unit","Medications Box","BP Monitor - SpO2"],
+  aemt: ["Stretcher - Spine Board","Cervical Collar","Trauma Kit - Bandage","IV Set & Cannula"],
+  driv: ["รถ EMS พร้อมใช้งาน","น้ำมันเพียงพอ","ไฟฉุกเฉิน - Siren","วิทยุสื่อสาร","อุปกรณ์นำทาง GPS"],
 };
 
-const DEFAULT_PIN = "1234"; // PIN เริ่มต้น — หัวหน้าเปลี่ยนได้ในแอป
-const PIN_SESSION_KEY = "ems_pin_unlocked"; // เก็บสถานะ unlock ใน session
+const DEFAULT_PIN = "1234"; -- PIN เริ่มต้น — หัวหน้าเปลี่ยนได้ในแอป
+const PIN_SESSION_KEY = "ems_pin_unlocked"; -- เก็บสถานะ unlock ใน session
 
 const MONTH_NAMES = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
 const KEY_ROLE = "ems_my_role";
 
-/* ─── Helpers ─── */
+-* ─── Helpers ─── *-
 function ls(key, fb) { try { const v=localStorage.getItem(key); return v?JSON.parse(v):fb; } catch { return fb; } }
 function ss(key, v)  { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }
 function getDays(y,m){ return new Date(y,m+1,0).getDate(); }
@@ -60,7 +60,7 @@ function recKey(y,m,d,shift,roleId){
 }
 function todayParts(){ const t=new Date(); return {year:t.getFullYear(),month:t.getMonth(),day:t.getDate()}; }
 
-/* ─── Shared styles ─── */
+-* ─── Shared styles ─── *-
 const BASE_INP = {
   background:"rgba(255,255,255,0.07)", border:"1.5px solid rgba(255,255,255,0.13)",
   borderRadius:9, padding:"10px 14px", color:"#f1f5f9", fontSize:14,
@@ -76,12 +76,12 @@ const iconBtn = {
   color:"#94a3b8", cursor:"pointer", padding:"3px 7px", fontSize:11, lineHeight:1,
 };
 function Card({ children, style={} }) {
-  return <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"18px 20px", marginBottom:14, ...style }}>{children}</div>;
+  return <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"18px 20px", marginBottom:14, ...style }}>{children}<-div>;
 }
 
-/* ══════════════════════════════════════════
+-* ══════════════════════════════════════════
    PIN LOCK SCREEN
-══════════════════════════════════════════ */
+══════════════════════════════════════════ *-
 function PinLockScreen({ onUnlock }) {
   const [pin, setPin]       = useState("");
   const [error, setError]   = useState(false);
@@ -89,15 +89,15 @@ function PinLockScreen({ onUnlock }) {
   const [correctPin, setCorrectPin] = useState(DEFAULT_PIN);
   const inputRef = useRef(null);
 
-  // Load PIN from Firebase
+  -- Load PIN from Firebase
   useEffect(() => {
-    const unsub = onValue(ref(db, "config/summaryPin"), (snap) => {
+    const unsub = onValue(ref(db, "config-summaryPin"), (snap) => {
       if (snap.val()) setCorrectPin(snap.val());
     });
     return () => unsub();
   }, []);
 
-  // Focus input on mount
+  -- Focus input on mount
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   function handleDigit(d) {
@@ -135,11 +135,11 @@ function PinLockScreen({ onUnlock }) {
       fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",
       padding:24,
     }}>
-      <div style={{ fontSize:44, marginBottom:12 }}>🔒</div>
-      <div style={{ fontSize:20, fontWeight:800, color:"#f1f5f9", marginBottom:6 }}>หน้าสรุปรายเดือน</div>
-      <div style={{ fontSize:14, color:"#64748b", marginBottom:40 }}>ใส่ PIN เพื่อเข้าถึงข้อมูล</div>
+      <div style={{ fontSize:44, marginBottom:12 }}>🔒<-div>
+      <div style={{ fontSize:20, fontWeight:800, color:"#f1f5f9", marginBottom:6 }}>หน้าสรุปรายเดือน<-div>
+      <div style={{ fontSize:14, color:"#64748b", marginBottom:40 }}>ใส่ PIN เพื่อเข้าถึงข้อมูล<-div>
 
-      {/* PIN dots */}
+      {-* PIN dots *-}
       <div style={{
         display:"flex", gap:16, marginBottom:36,
         animation: shake ? "shake 0.4s ease" : "none",
@@ -152,17 +152,17 @@ function PinLockScreen({ onUnlock }) {
               : "rgba(255,255,255,0.15)",
             transition:"background 0.15s",
             boxShadow: i < pin.length && !error ? "0 0 8px rgba(255,255,255,0.4)" : "none",
-          }}/>
+          }}->
         ))}
-      </div>
+      <-div>
 
       {error && (
         <div style={{ fontSize:13, color:"#ef4444", marginBottom:20, fontWeight:600 }}>
           PIN ไม่ถูกต้อง กรุณาลองใหม่
-        </div>
+        <-div>
       )}
 
-      {/* Numpad */}
+      {-* Numpad *-}
       <div style={{
         display:"grid", gridTemplateColumns:"repeat(3, 72px)",
         gap:12,
@@ -182,9 +182,9 @@ function PinLockScreen({ onUnlock }) {
               transition:"all 0.15s",
               boxShadow: d ? "inset 0 1px 0 rgba(255,255,255,0.1)" : "none",
             }}
-          >{d}</button>
+          >{d}<-button>
         ))}
-      </div>
+      <-div>
 
       <style>{`
         @keyframes shake {
@@ -194,20 +194,20 @@ function PinLockScreen({ onUnlock }) {
           60%{ transform:translateX(-6px) }
           80%{ transform:translateX(6px) }
         }
-      `}</style>
-    </div>
+      `}<-style>
+    <-div>
   );
 }
 
-/* ══════════════════════════════════════════
+-* ══════════════════════════════════════════
    ROLE SELECT SCREEN
-══════════════════════════════════════════ */
+══════════════════════════════════════════ *-
 function RoleSelectScreen({ onSelect }) {
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f172a,#1e293b)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Sarabun','Noto Sans Thai',sans-serif" }}>
-      <div style={{ fontSize:52, marginBottom:16 }}>🚑</div>
-      <div style={{ fontSize:22, fontWeight:900, color:"#f1f5f9", marginBottom:6 }}>EMS Equipment Check</div>
-      <div style={{ fontSize:14, color:"#64748b", marginBottom:40 }}>รพ.มหาราช · เลือกตำแหน่งของคุณ</div>
+      <div style={{ fontSize:52, marginBottom:16 }}>🚑<-div>
+      <div style={{ fontSize:22, fontWeight:900, color:"#f1f5f9", marginBottom:6 }}>EMS Equipment Check<-div>
+      <div style={{ fontSize:14, color:"#64748b", marginBottom:40 }}>รพ.มหาราช · เลือกตำแหน่งของคุณ<-div>
       {ROLES.map(r => (
         <button key={r.id} onClick={()=>onSelect(r.id)} style={{
           width:"100%", maxWidth:360, marginBottom:14, padding:"20px 24px",
@@ -215,28 +215,28 @@ function RoleSelectScreen({ onSelect }) {
           background:`linear-gradient(135deg,${r.color}22,${r.color}11)`,
           display:"flex", alignItems:"center", gap:16, fontFamily:"inherit",
         }}>
-          <div style={{ fontSize:32 }}>{r.icon}</div>
+          <div style={{ fontSize:32 }}>{r.icon}<-div>
           <div style={{ textAlign:"left" }}>
-            <div style={{ fontSize:17, fontWeight:800, color:"#f1f5f9" }}>{r.label}</div>
-            <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>แตะเพื่อเข้าระบบ</div>
-          </div>
-          <div style={{ marginLeft:"auto", color:r.color, fontSize:22 }}>›</div>
-        </button>
+            <div style={{ fontSize:17, fontWeight:800, color:"#f1f5f9" }}>{r.label}<-div>
+            <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>แตะเพื่อเข้าระบบ<-div>
+          <-div>
+          <div style={{ marginLeft:"auto", color:r.color, fontSize:22 }}>›<-div>
+        <-button>
       ))}
-    </div>
+    <-div>
   );
 }
 
-/* ══════════════════════════════════════════
+-* ══════════════════════════════════════════
    SETTINGS PAGE
-══════════════════════════════════════════ */
+══════════════════════════════════════════ *-
 function SettingsPage({ myRole, equipment, onSaveEquip }) {
   const role  = ROLE_MAP[myRole];
   const [draft,    setDraft]    = useState([...(equipment[myRole]||[])]);
   const [saved,    setSaved]    = useState(false);
   const [saving,   setSaving]   = useState(false);
 
-  // PIN change (หัวหน้าเท่านั้น — แสดงเฉพาะ Para/RN)
+  -- PIN change (หัวหน้าเท่านั้น — แสดงเฉพาะ Para-RN)
   const [currentPin, setCurrentPin] = useState("");
   const [newPin,     setNewPin]     = useState("");
   const [pinSaved,   setPinSaved]   = useState(false);
@@ -244,7 +244,7 @@ function SettingsPage({ myRole, equipment, onSaveEquip }) {
   const [realPin,    setRealPin]    = useState(DEFAULT_PIN);
 
   useEffect(() => {
-    const unsub = onValue(ref(db,"config/summaryPin"), snap => {
+    const unsub = onValue(ref(db,"config-summaryPin"), snap => {
       if(snap.val()) setRealPin(snap.val());
     });
     return () => unsub();
@@ -268,65 +268,65 @@ function SettingsPage({ myRole, equipment, onSaveEquip }) {
     setPinError("");
     if (currentPin !== realPin) { setPinError("PIN ปัจจุบันไม่ถูกต้อง"); return; }
     if (newPin.length < 4)      { setPinError("PIN ใหม่ต้องมีอย่างน้อย 4 ตัว"); return; }
-    if (!/^\d+$/.test(newPin))  { setPinError("PIN ต้องเป็นตัวเลขเท่านั้น"); return; }
-    await set(ref(db,"config/summaryPin"), newPin);
+    if (!-^\d+$-.test(newPin))  { setPinError("PIN ต้องเป็นตัวเลขเท่านั้น"); return; }
+    await set(ref(db,"config-summaryPin"), newPin);
     setPinSaved(true); setCurrentPin(""); setNewPin("");
     setTimeout(()=>setPinSaved(false),2000);
   }
 
   return (
     <div>
-      {/* Equipment settings */}
+      {-* Equipment settings *-}
       <Card>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:4 }}>
-          <span style={{ fontSize:28 }}>{role.icon}</span>
+          <span style={{ fontSize:28 }}>{role.icon}<-span>
           <div>
-            <div style={{ fontSize:16, fontWeight:800 }}>ตั้งค่ารายการอุปกรณ์</div>
-            <div style={{ fontSize:13, color:"#94a3b8" }}>สำหรับ {role.label}</div>
-          </div>
-        </div>
-      </Card>
+            <div style={{ fontSize:16, fontWeight:800 }}>ตั้งค่ารายการอุปกรณ์<-div>
+            <div style={{ fontSize:13, color:"#94a3b8" }}>สำหรับ {role.label}<-div>
+          <-div>
+        <-div>
+      <-Card>
       <Card>
         {draft.map((item,i) => (
           <div key={i} style={{ display:"flex", gap:6, marginBottom:8, alignItems:"center" }}>
             <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-              <button onClick={()=>move(i,-1)} style={iconBtn}>▲</button>
-              <button onClick={()=>move(i, 1)} style={iconBtn}>▼</button>
-            </div>
+              <button onClick={()=>move(i,-1)} style={iconBtn}>▲<-button>
+              <button onClick={()=>move(i, 1)} style={iconBtn}>▼<-button>
+            <-div>
             <input value={item} onChange={e=>update(i,e.target.value)}
-              placeholder={`รายการที่ ${i+1}`} style={BASE_INP} />
-            <button onClick={()=>remove(i)} style={{ ...iconBtn, background:"rgba(239,68,68,0.15)", color:"#f87171", padding:"6px 10px", fontSize:14 }}>✕</button>
-          </div>
+              placeholder={`รายการที่ ${i+1}`} style={BASE_INP} ->
+            <button onClick={()=>remove(i)} style={{ ...iconBtn, background:"rgba(239,68,68,0.15)", color:"#f87171", padding:"6px 10px", fontSize:14 }}>✕<-button>
+          <-div>
         ))}
         <button onClick={add} style={{ marginTop:6, padding:"9px 18px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, background:role.color+"22", color:role.color }}>
           + เพิ่มรายการ
-        </button>
-      </Card>
+        <-button>
+      <-Card>
       <div style={{ display:"flex", gap:10, marginBottom:24 }}>
-        <button onClick={()=>{ if(window.confirm("รีเซ็ตรายการกลับค่าเริ่มต้น?")) setDraft([...DEFAULT_EQUIPMENT[myRole]]); }} style={{ flex:1, padding:"13px 0", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:14, fontWeight:700, background:"rgba(255,255,255,0.07)", color:"#94a3b8" }}>🔄 รีเซ็ต</button>
+        <button onClick={()=>{ if(window.confirm("รีเซ็ตรายการกลับค่าเริ่มต้น?")) setDraft([...DEFAULT_EQUIPMENT[myRole]]); }} style={{ flex:1, padding:"13px 0", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:14, fontWeight:700, background:"rgba(255,255,255,0.07)", color:"#94a3b8" }}>🔄 รีเซ็ต<-button>
         <button onClick={handleSaveEquip} disabled={saving} style={{ flex:3, padding:"13px 0", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:15, fontWeight:800, background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${role.color}cc)`, color:"#fff", transition:"all 0.3s" }}>
           {saving?"⏳ กำลังบันทึก...":saved?"✅ บันทึกแล้ว!":"💾 บันทึกการตั้งค่า"}
-        </button>
-      </div>
+        <-button>
+      <-div>
 
-      {/* PIN change — แสดงทุกตำแหน่ง (ใครรู้ PIN เก่าก็เปลี่ยนได้) */}
+      {-* PIN change — แสดงทุกตำแหน่ง (ใครรู้ PIN เก่าก็เปลี่ยนได้) *-}
       <Card style={{ border:"1.5px solid rgba(251,191,36,0.3)" }}>
-        <div style={{ fontSize:14, fontWeight:800, color:"#fbbf24", marginBottom:14 }}>🔑 เปลี่ยน PIN หน้าสรุปเดือน</div>
+        <div style={{ fontSize:14, fontWeight:800, color:"#fbbf24", marginBottom:14 }}>🔑 เปลี่ยน PIN หน้าสรุปเดือน<-div>
         <div style={{ marginBottom:10 }}>
-          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>PIN ปัจจุบัน</div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>PIN ปัจจุบัน<-div>
           <input type="password" inputMode="numeric" value={currentPin}
             onChange={e=>{ setCurrentPin(e.target.value); setPinError(""); setPinSaved(false); }}
             placeholder="ใส่ PIN ปัจจุบัน" maxLength={6}
-            style={{ ...BASE_INP, letterSpacing:6, fontSize:20 }} />
-        </div>
+            style={{ ...BASE_INP, letterSpacing:6, fontSize:20 }} ->
+        <-div>
         <div style={{ marginBottom:14 }}>
-          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>PIN ใหม่ (4-6 หลัก)</div>
+          <div style={{ fontSize:12, color:"#94a3b8", marginBottom:6 }}>PIN ใหม่ (4-6 หลัก)<-div>
           <input type="password" inputMode="numeric" value={newPin}
-            onChange={e=>{ setNewPin(e.target.value.replace(/\D/g,"")); setPinError(""); setPinSaved(false); }}
+            onChange={e=>{ setNewPin(e.target.value.replace(-\D-g,"")); setPinError(""); setPinSaved(false); }}
             placeholder="ใส่ PIN ใหม่" maxLength={6}
-            style={{ ...BASE_INP, letterSpacing:6, fontSize:20 }} />
-        </div>
-        {pinError && <div style={{ fontSize:13, color:"#f87171", marginBottom:10 }}>⚠️ {pinError}</div>}
+            style={{ ...BASE_INP, letterSpacing:6, fontSize:20 }} ->
+        <-div>
+        {pinError && <div style={{ fontSize:13, color:"#f87171", marginBottom:10 }}>⚠️ {pinError}<-div>}
         <button onClick={handleChangePin} style={{
           width:"100%", padding:"12px 0", borderRadius:10, border:"none",
           cursor:"pointer", fontFamily:"inherit", fontSize:14, fontWeight:800,
@@ -334,23 +334,23 @@ function SettingsPage({ myRole, equipment, onSaveEquip }) {
           color:"#fff", transition:"all 0.3s",
         }}>
           {pinSaved ? "✅ เปลี่ยน PIN เรียบร้อย!" : "🔑 เปลี่ยน PIN"}
-        </button>
+        <-button>
         <div style={{ fontSize:12, color:"#475569", marginTop:10, textAlign:"center" }}>
           PIN เริ่มต้น: 1234 — เปลี่ยนก่อนใช้งานจริงด้วยนะคะ
-        </div>
-      </Card>
-    </div>
+        <-div>
+      <-Card>
+    <-div>
   );
 }
 
-/* ══════════════════════════════════════════
+-* ══════════════════════════════════════════
    CHECK PAGE
-══════════════════════════════════════════ */
+══════════════════════════════════════════ *-
 function CheckPage({ myRole, selYear, selMonth, selDay, selShift, equipment }) {
   const role  = ROLE_MAP[myRole];
   const items = equipment[myRole] || [];
   const key   = recKey(selYear, selMonth, selDay, selShift, myRole);
-  const dbRef = ref(db, `records/${key}`);
+  const dbRef = ref(db, `records-${key}`);
   const shiftMeta = SHIFT_META[selShift];
 
   const [myName,  setMyName]  = useState("");
@@ -382,67 +382,67 @@ function CheckPage({ myRole, selYear, selMonth, selDay, selShift, equipment }) {
   const done  = items.filter(i=>checked[i]).length;
   const total = items.length;
 
-  if (loading) return <div style={{ textAlign:"center", padding:60, color:"#64748b" }}><div style={{ fontSize:32, marginBottom:12 }}>⏳</div>กำลังโหลด...</div>;
+  if (loading) return <div style={{ textAlign:"center", padding:60, color:"#64748b" }}><div style={{ fontSize:32, marginBottom:12 }}>⏳<-div>กำลังโหลด...<-div>;
 
   return (
     <div>
       <div style={{ background:shiftMeta.accent+"20", border:`1.5px solid ${shiftMeta.accent}44`, borderRadius:10, padding:"10px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:10 }}>
-        <span style={{ fontSize:13, color:shiftMeta.accent }}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
-        {saved && <span style={{ marginLeft:"auto", fontSize:12, color:"#4ade80" }}>✓ Sync ☁️</span>}
-      </div>
+        <span style={{ fontSize:13, color:shiftMeta.accent }}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}<-span>
+        {saved && <span style={{ marginLeft:"auto", fontSize:12, color:"#4ade80" }}>✓ Sync ☁️<-span>}
+      <-div>
 
       <Card>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-          <span style={{ fontSize:26 }}>{role.icon}</span>
+          <span style={{ fontSize:26 }}>{role.icon}<-span>
           <div>
-            <div style={{ fontWeight:800, fontSize:15, color:role.color }}>{role.label}</div>
-            <div style={{ fontSize:12, color:"#64748b" }}>ผู้รับผิดชอบตรวจเช็ค</div>
-          </div>
-        </div>
-        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP} />
-      </Card>
+            <div style={{ fontWeight:800, fontSize:15, color:role.color }}>{role.label}<-div>
+            <div style={{ fontSize:12, color:"#64748b" }}>ผู้รับผิดชอบตรวจเช็ค<-div>
+          <-div>
+        <-div>
+        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP} ->
+      <-Card>
 
       <Card style={{ paddingBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-          <span style={{ fontSize:13, fontWeight:700, color:"#94a3b8" }}>ความคืบหน้า</span>
-          <span style={{ fontSize:13, color:done===total&&total>0?"#4ade80":"#f59e0b" }}>{done}/{total}</span>
-        </div>
+          <span style={{ fontSize:13, fontWeight:700, color:"#94a3b8" }}>ความคืบหน้า<-span>
+          <span style={{ fontSize:13, color:done===total&&total>0?"#4ade80":"#f59e0b" }}>{done}-{total}<-span>
+        <-div>
         <div style={{ height:8, background:"#1e293b", borderRadius:99, overflow:"hidden" }}>
-          <div style={{ height:"100%", borderRadius:99, transition:"width 0.3s", background:`linear-gradient(90deg,${role.color},#4ade80)`, width:`${total?(done/total)*100:0}%` }}/>
-        </div>
-      </Card>
+          <div style={{ height:"100%", borderRadius:99, transition:"width 0.3s", background:`linear-gradient(90deg,${role.color},#4ade80)`, width:`${total?(done-total)*100:0}%` }}->
+        <-div>
+      <-Card>
 
       <Card>
-        <div style={{ fontSize:13, fontWeight:700, color:"#94a3b8", marginBottom:12 }}>🔧 รายการตรวจเช็ค</div>
+        <div style={{ fontSize:13, fontWeight:700, color:"#94a3b8", marginBottom:12 }}>🔧 รายการตรวจเช็ค<-div>
         {items.length===0 ? (
-          <div style={{ fontSize:13, color:"#475569", fontStyle:"italic" }}>ยังไม่มีรายการ · ไปตั้งค่าที่ ⚙️ ก่อนค่ะ</div>
+          <div style={{ fontSize:13, color:"#475569", fontStyle:"italic" }}>ยังไม่มีรายการ · ไปตั้งค่าที่ ⚙️ ก่อนค่ะ<-div>
         ) : items.map(item => {
           const ck=!!checked[item];
           return (
             <label key={item} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", borderRadius:8, cursor:"pointer", marginBottom:4, background:ck?"rgba(74,222,128,0.08)":"transparent", transition:"background 0.15s" }}>
-              <input type="checkbox" checked={ck} onChange={()=>toggle(item)} style={{ width:18, height:18, accentColor:role.color, cursor:"pointer", flexShrink:0 }} />
-              <span style={{ fontSize:14, color:ck?"#4ade80":"#cbd5e1", flex:1 }}>{item}</span>
-              {ck && <span style={{ color:"#4ade80", fontSize:13 }}>✓</span>}
-            </label>
+              <input type="checkbox" checked={ck} onChange={()=>toggle(item)} style={{ width:18, height:18, accentColor:role.color, cursor:"pointer", flexShrink:0 }} ->
+              <span style={{ fontSize:14, color:ck?"#4ade80":"#cbd5e1", flex:1 }}>{item}<-span>
+              {ck && <span style={{ color:"#4ade80", fontSize:13 }}>✓<-span>}
+            <-label>
           );
         })}
-      </Card>
+      <-Card>
 
       <Card>
-        <div style={{ fontSize:13, fontWeight:700, color:"#94a3b8", marginBottom:10 }}>📝 หมายเหตุ</div>
-        <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);}} placeholder="เช่น อุปกรณ์ชำรุด, ของขาด..." rows={3} style={{ ...BASE_INP, resize:"vertical", lineHeight:1.7 }} />
-      </Card>
+        <div style={{ fontSize:13, fontWeight:700, color:"#94a3b8", marginBottom:10 }}>📝 หมายเหตุ<-div>
+        <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);}} placeholder="เช่น อุปกรณ์ชำรุด, ของขาด..." rows={3} style={{ ...BASE_INP, resize:"vertical", lineHeight:1.7 }} ->
+      <-Card>
 
       <button onClick={handleSave} disabled={saving} style={{ width:"100%", padding:"16px 0", borderRadius:12, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:16, fontWeight:800, background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`, color:"#fff", boxShadow:`0 4px 20px ${role.color}44`, transition:"all 0.3s" }}>
         {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
-      </button>
-    </div>
+      <-button>
+    <-div>
   );
 }
 
-/* ══════════════════════════════════════════
+-* ══════════════════════════════════════════
    SUMMARY PAGE (PIN protected)
-══════════════════════════════════════════ */
+══════════════════════════════════════════ *-
 function SummaryPage({ selYear, selMonth, equipment, onLock }) {
   const [allData,  setAllData]  = useState({});
   const [loading,  setLoading]  = useState(true);
@@ -483,39 +483,39 @@ function SummaryPage({ selYear, selMonth, equipment, onLock }) {
     rows.map(({day,shift,roleResults})=>{
       const missing=roleResults.filter(r=>!r.entry||!r.entry.name||r.done<r.total);
       return `• ${day} ${MONTH_NAMES[selMonth]} เวร${shift}\n`+
-        missing.map(r=>`  - ${r.role.short}: ${r.entry?.name||"ไม่มีชื่อ"} [${r.done}/${r.total}]`).join("\n");
+        missing.map(r=>`  - ${r.role.short}: ${r.entry?.name||"ไม่มีชื่อ"} [${r.done}-${r.total}]`).join("\n");
     }).join("\n")+
     `\n${"─".repeat(36)}\nรวม ${rows.length} เวร`;
 
-  if(loading) return <div style={{ textAlign:"center", padding:60, color:"#64748b" }}><div style={{ fontSize:32, marginBottom:12 }}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{ textAlign:"center", padding:60, color:"#64748b" }}><div style={{ fontSize:32, marginBottom:12 }}>⏳<-div>กำลังโหลด...<-div>;
 
   return (
     <div>
       <Card>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:800, marginBottom:4 }}>📊 สรุปเดือน{MONTH_NAMES[selMonth]} {selYear+543}</div>
-            <div style={{ fontSize:13, color:"#94a3b8" }}>ข้อมูล Real-time ☁️</div>
-          </div>
-          {/* Lock button */}
+            <div style={{ fontSize:16, fontWeight:800, marginBottom:4 }}>📊 สรุปเดือน{MONTH_NAMES[selMonth]} {selYear+543}<-div>
+            <div style={{ fontSize:13, color:"#94a3b8" }}>ข้อมูล Real-time ☁️<-div>
+          <-div>
+          {-* Lock button *-}
           <button onClick={onLock} style={{
             padding:"8px 14px", borderRadius:8, border:"none", cursor:"pointer",
             fontFamily:"inherit", fontSize:13, fontWeight:700,
             background:"rgba(251,191,36,0.15)", color:"#fbbf24",
-          }}>🔒 ล็อค</button>
-        </div>
-      </Card>
+          }}>🔒 ล็อค<-button>
+        <-div>
+      <-Card>
 
       {rows.length===0 ? (
         <div style={{ background:"rgba(74,222,128,0.1)", border:"1.5px solid #4ade8055", borderRadius:14, padding:36, textAlign:"center" }}>
-          <div style={{ fontSize:44, marginBottom:10 }}>✅</div>
-          <div style={{ fontSize:16, fontWeight:700, color:"#4ade80" }}>ครบทุกเวรแล้วค่ะ!</div>
-        </div>
+          <div style={{ fontSize:44, marginBottom:10 }}>✅<-div>
+          <div style={{ fontSize:16, fontWeight:700, color:"#4ade80" }}>ครบทุกเวรแล้วค่ะ!<-div>
+        <-div>
       ) : (
         <>
           <div style={{ background:"rgba(239,68,68,0.1)", border:"1.5px solid #ef444455", borderRadius:10, padding:"12px 16px", marginBottom:14, fontSize:14 }}>
-            ⚠️ พบ <strong>{rows.length}</strong> เวร ที่ยังไม่สมบูรณ์
-          </div>
+            ⚠️ พบ <strong>{rows.length}<-strong> เวร ที่ยังไม่สมบูรณ์
+          <-div>
           {rows.map(({day,shift,roleResults},idx)=>{
             const sm=SHIFT_META[shift];
             return (
@@ -523,44 +523,44 @@ function SummaryPage({ selYear, selMonth, equipment, onLock }) {
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
                   <div style={{ padding:"4px 12px", borderRadius:8, fontSize:13, fontWeight:800, background:sm.accent+"22", color:sm.accent }}>
                     {sm.icon} {day} {MONTH_NAMES[selMonth].slice(0,3)} · เวร{shift}
-                  </div>
-                </div>
+                  <-div>
+                <-div>
                 <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                   {roleResults.map(r=>{
                     const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
                     return (
                       <div key={r.role.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:8, background:ok?"rgba(74,222,128,0.06)":"rgba(239,68,68,0.06)", border:`1px solid ${ok?"#4ade8033":"#ef444433"}` }}>
-                        <span style={{ fontSize:18 }}>{r.role.icon}</span>
+                        <span style={{ fontSize:18 }}>{r.role.icon}<-span>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontSize:13, fontWeight:700, color:r.role.color }}>{r.role.short}</div>
-                          <div style={{ fontSize:12, color:"#94a3b8" }}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
-                        </div>
+                          <div style={{ fontSize:13, fontWeight:700, color:r.role.color }}>{r.role.short}<-div>
+                          <div style={{ fontSize:12, color:"#94a3b8" }}>{r.entry?.name||"ยังไม่ได้บันทึก"}<-div>
+                        <-div>
                         <div style={{ fontSize:12, color:ok?"#4ade80":"#f87171", fontWeight:700 }}>
-                          {ok?"✓ ครบ":`${r.done}/${r.total}`}
-                        </div>
-                      </div>
+                          {ok?"✓ ครบ":`${r.done}-${r.total}`}
+                        <-div>
+                      <-div>
                     );
                   })}
-                </div>
-              </Card>
+                <-div>
+              <-Card>
             );
           })}
           <Card>
-            <div style={{ fontSize:13, fontWeight:700, color:"#94a3b8", marginBottom:10 }}>📋 คัดลอกส่งหัวหน้า</div>
-            <div style={{ background:"#0f172a", borderRadius:8, padding:14, fontSize:12, lineHeight:1.9, color:"#e2e8f0", fontFamily:"monospace", whiteSpace:"pre-wrap", marginBottom:12 }}>{copyText}</div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#94a3b8", marginBottom:10 }}>📋 คัดลอกส่งหัวหน้า<-div>
+            <div style={{ background:"#0f172a", borderRadius:8, padding:14, fontSize:12, lineHeight:1.9, color:"#e2e8f0", fontFamily:"monospace", whiteSpace:"pre-wrap", marginBottom:12 }}>{copyText}<-div>
             <button onClick={()=>navigator.clipboard.writeText(copyText)} style={{ padding:"10px 22px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, background:"#3b82f6", color:"#fff" }}>
               📋 คัดลอกข้อความ
-            </button>
-          </Card>
-        </>
+            <-button>
+          <-Card>
+        <->
       )}
-    </div>
+    <-div>
   );
 }
 
-/* ══════════════════════════════════════════
+-* ══════════════════════════════════════════
    ROOT APP
-══════════════════════════════════════════ */
+══════════════════════════════════════════ *-
 export default function App() {
   const {year:ty,month:tm,day:td} = todayParts();
   const [myRole,    setMyRole]    = useState(()=>ls(KEY_ROLE,null));
@@ -571,10 +571,10 @@ export default function App() {
   const [selShift,  setSelShift]  = useState("เช้า");
   const [equipment, setEquipment] = useState(DEFAULT_EQUIPMENT);
 
-  // PIN state — ตรวจว่า session นี้ unlock แล้วหรือยัง
+  -- PIN state — ตรวจว่า session นี้ unlock แล้วหรือยัง
   const [pinUnlocked, setPinUnlocked] = useState(() => {
     const t = ls(PIN_SESSION_KEY, 0);
-    // ถ้า unlock ภายใน 8 ชม. ถือว่ายัง valid
+    -- ถ้า unlock ภายใน 8 ชม. ถือว่ายัง valid
     return t && (Date.now() - t) < 8 * 60 * 60 * 1000;
   });
 
@@ -595,11 +595,11 @@ export default function App() {
     setView("check");
   }
 
-  if (!myRole) return <RoleSelectScreen onSelect={selectRole} />;
+  if (!myRole) return <RoleSelectScreen onSelect={selectRole} ->;
 
-  // ถ้าพยายามเข้า summary แต่ยังไม่ unlock
+  -- ถ้าพยายามเข้า summary แต่ยังไม่ unlock
   if (view === "summary" && !pinUnlocked) {
-    return <PinLockScreen onUnlock={handleUnlock} />;
+    return <PinLockScreen onUnlock={handleUnlock} ->;
   }
 
   const role = ROLE_MAP[myRole];
@@ -612,56 +612,56 @@ export default function App() {
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f172a,#1e293b)", fontFamily:"'Sarabun','Noto Sans Thai',sans-serif", color:"#f1f5f9" }}>
       <div style={{ background:"linear-gradient(90deg,#dc2626,#b91c1c)", padding:"14px 18px", display:"flex", alignItems:"center", gap:12, boxShadow:"0 4px 24px rgba(220,38,38,0.4)", flexWrap:"wrap" }}>
-        <div style={{ fontSize:26 }}>🚑</div>
+        <div style={{ fontSize:26 }}>🚑<-div>
         <div>
-          <div style={{ fontSize:17, fontWeight:800, letterSpacing:1 }}>EMS Equipment Check</div>
-          <div style={{ fontSize:11, opacity:.85 }}>รพ.มหาราช · ☁️ Firebase</div>
-        </div>
+          <div style={{ fontSize:17, fontWeight:800, letterSpacing:1 }}>EMS Equipment Check<-div>
+          <div style={{ fontSize:11, opacity:.85 }}>รพ.มหาราช · ☁️ Firebase<-div>
+        <-div>
         <button onClick={switchRole} style={{ display:"flex", alignItems:"center", gap:6, background:role.color+"33", border:`1.5px solid ${role.color}66`, borderRadius:20, padding:"5px 14px", cursor:"pointer", fontFamily:"inherit", color:"#f1f5f9", fontSize:13, fontWeight:700 }}>
-          {role.icon} {role.short} <span style={{ fontSize:11, opacity:.7 }}>เปลี่ยน</span>
-        </button>
+          {role.icon} {role.short} <span style={{ fontSize:11, opacity:.7 }}>เปลี่ยน<-span>
+        <-button>
         <div style={{ marginLeft:"auto", display:"flex", gap:6, flexWrap:"wrap" }}>
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setView(t.id)} style={{ padding:"7px 13px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700, background:view===t.id?"#fff":"rgba(255,255,255,0.15)", color:view===t.id?"#dc2626":"#fff", transition:"all 0.2s" }}>
               {t.label}
-            </button>
+            <-button>
           ))}
-        </div>
-      </div>
+        <-div>
+      <-div>
 
       <div style={{ maxWidth:720, margin:"0 auto", padding:"18px 14px" }}>
         {view!=="settings" && (
           <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"13px 16px", marginBottom:14, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-            <span style={{ fontSize:13, opacity:.65 }}>เดือน/ปี:</span>
+            <span style={{ fontSize:13, opacity:.65 }}>เดือน-ปี:<-span>
             <select value={selMonth} onChange={e=>setSelMonth(+e.target.value)} style={BASE_SEL}>
-              {MONTH_NAMES.map((m,i)=><option key={i} value={i}>{m}</option>)}
-            </select>
+              {MONTH_NAMES.map((m,i)=><option key={i} value={i}>{m}<-option>)}
+            <-select>
             <select value={selYear} onChange={e=>setSelYear(+e.target.value)} style={BASE_SEL}>
-              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y+543}</option>)}
-            </select>
+              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y+543}<-option>)}
+            <-select>
             {view==="check" && (
               <>
-                <span style={{ fontSize:13, opacity:.65 }}>วันที่:</span>
+                <span style={{ fontSize:13, opacity:.65 }}>วันที่:<-span>
                 <select value={selDay} onChange={e=>setSelDay(+e.target.value)} style={BASE_SEL}>
                   {Array.from({length:getDays(selYear,selMonth)},(_,i)=>i+1).map(d=>
-                    <option key={d} value={d}>{d}</option>)}
-                </select>
+                    <option key={d} value={d}>{d}<-option>)}
+                <-select>
                 <div style={{ display:"flex", gap:6, marginLeft:"auto" }}>
                   {SHIFTS.map(s=>(
                     <button key={s} onClick={()=>setSelShift(s)} style={{ padding:"6px 13px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, background:selShift===s?SHIFT_META[s].accent:"rgba(255,255,255,0.07)", color:selShift===s?"#fff":"#94a3b8", transition:"all 0.2s" }}>
                       {SHIFT_META[s].icon} {s}
-                    </button>
+                    <-button>
                   ))}
-                </div>
-              </>
+                <-div>
+              <->
             )}
-          </div>
+          <-div>
         )}
 
-        {view==="check"    && <CheckPage    myRole={myRole} selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift} equipment={equipment}/>}
-        {view==="summary"  && <SummaryPage  selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
-        {view==="settings" && <SettingsPage myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
-      </div>
-    </div>
+        {view==="check"    && <CheckPage    myRole={myRole} selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift} equipment={equipment}->}
+        {view==="summary"  && <SummaryPage  selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}->}
+        {view==="settings" && <SettingsPage myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}->}
+      <-div>
+    <-div>
   );
 }
