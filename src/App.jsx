@@ -13,10 +13,10 @@ import { getDatabase, ref, set, onValue } from "firebase/database";
 /* ─── Firebase Config ─── */
 const firebaseConfig = {
   apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "YOUR_PROJECT",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
+  authDomain:        "ems-equipment-mnst.firebaseapp.com",
+  databaseURL:       "https://ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "ems-equipment-mnst",
+  storageBucket:     "ems-equipment-mnst.appspot.com",
   messagingSenderId: "YOUR_SENDER_ID",
   appId:             "YOUR_APP_ID",
 };
