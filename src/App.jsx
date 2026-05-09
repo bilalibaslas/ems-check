@@ -369,6 +369,203 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
   );
 }
 
+
+/* ── AEMT grouped items ── */
+const AEMT_GROUPS = [
+  {
+    id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#3b82f6",
+    items:[
+      {id:"opa",        label:"Oropharyngeal airway (ผู้ใหญ่ 3 อัน, เด็ก 4 อัน)",    hasExp:false},
+      {id:"nasal",      label:"Nasal cannula (ผู้ใหญ่, เด็ก 2 อัน)",                  hasExp:false},
+      {id:"maskreservoir", label:"Mask c reservoir bag (ผู้ใหญ่, เด็ก)",              hasExp:false},
+      {id:"collarmask", label:"Collar mask (ผู้ใหญ่, เด็ก)",                          hasExp:false},
+      {id:"nebu",       label:"Set พ่นยา (ผู้ใหญ่, เด็ก)",                            hasExp:false},
+      {id:"suction",    label:"Suction (เครื่อง, สาย, ความสะอาด)",                    hasExp:false},
+      {id:"suctiontubes",label:"สาย Suction (ดำ, ขาว, เขียว, ส้ม, แดง)",             hasExp:false},
+      {id:"o2bottle",   label:"Oxygen Humidifier Bottle",                              hasExp:true},
+    ]
+  },
+  {
+    id:"circulation", label:"2. Circulation", icon:"🩸", color:"#ef4444",
+    items:[
+      {id:"tubelab",    label:"Tube Lab (5 tube+H/C ผู้ใหญ่, เด็ก)",                  hasExp:false},
+      {id:"tourniquet", label:"Tourniquet ห้ามเลือด",                                  hasExp:false},
+      {id:"pelvicbinder",label:"Pelvic binder",                                       hasExp:false},
+      {id:"nssirrig",   label:"NSS Irrigation 1,000 ml",                              hasExp:false},
+      {id:"iodine",     label:"Iodine",                                               hasExp:false},
+      {id:"alcohol",    label:"Alcohol ล้างแผล",                                       hasExp:false},
+      {id:"dressingset",label:"สำลี, ไม้พันสำลี, Gauze, Top gauze (ชุดทำแผล)",        hasExp:false},
+      {id:"elastic",    label:"Elastic bandage (2, 4, 6)",                            hasExp:false},
+      {id:"hardcollar", label:"Hard collar (ผู้ใหญ่, เด็ก)",                          hasExp:false},
+      {id:"vaccuum",    label:"Full body vacuum mattress",                            hasExp:false},
+      {id:"ked",        label:"KED",                                                  hasExp:false},
+    ]
+  },
+  {
+    id:"equipment", label:"3. Equipment", icon:"🔧", color:"#f59e0b",
+    items:[
+      {id:"delivery",   label:"Set คลอด",                                             hasExp:true},
+      {id:"lucas",      label:"LUCAS (แบต)",                                           hasExp:false},
+      {id:"glucometer", label:"Glucometer and Test strips",                           hasExp:false},
+      {id:"thermo",     label:"Thermometer",                                          hasExp:false},
+      {id:"penlight",   label:"Penlight",                                             hasExp:false},
+      {id:"broselow",   label:"Broselow tap emergency pediatrics",                    hasExp:false},
+      {id:"reddot",     label:"Reddot",                                               hasExp:false},
+      {id:"scissors",   label:"กรรไกร",                                               hasExp:false},
+      {id:"mci",        label:"ชุด MCI (กระเป๋า Tag, เทป, กรวย)",                    hasExp:false},
+    ]
+  },
+  {
+    id:"ppe", label:"4. PPE", icon:"🦺", color:"#10b981",
+    items:[
+      {id:"glove_disp", label:"ถุงมือ Disposed (S, M)",                               hasExp:false},
+      {id:"glove_ster", label:"ถุงมือ Sterile (6, 6.5, 7, 7.5)",                     hasExp:false},
+      {id:"faceshield", label:"Face shield",                                          hasExp:false},
+      {id:"cap",        label:"หมวกคลุมเขียว",                                         hasExp:false},
+      {id:"gown",       label:"Gown ฟ้า",                                              hasExp:false},
+      {id:"mask",       label:"Mask (N95, Surgical)",                                 hasExp:false},
+    ]
+  },
+];
+
+/* ── AEMT Check Page ── */
+function AemtCheckPage({selYear,selMonth,selDay,selShift}){
+  const role=ROLE_MAP["aemt"]; const shiftMeta=SHIFT_META[selShift];
+  const key=recKey(selYear,selMonth,selDay,selShift,"aemt");
+  const dbRef=ref(db,`records/${key}`);
+  const [myName,setMyName]=useState(""); const [checked,setChecked]=useState({});
+  const [note,setNote]=useState(""); const [expDates,setExpDates]=useState({});
+  const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
+  const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
+  const [noteError,setNoteError]=useState(false);
+
+  const totalItems=AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
+  const doneItems=AEMT_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
+
+  useEffect(()=>{
+    setLoading(true);
+    if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
+    const u=onValue(dbRef,snap=>{
+      const data=snap.val();
+      if(data){
+        setMyName(data.name||"");setChecked(data.checked||{});
+        setNote(data.note||"");setExpDates(data.expDates||{});
+        if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
+      } else {setMyName("");setChecked({});setNote("");setExpDates({});}
+      setLoading(false);setSaved(false);
+    });
+    return()=>u();
+  },[key]);
+
+  function toggle(id){setChecked(p=>({...p,[id]:!p[id]}));setSaved(false);}
+  function setExp(id,val){setExpDates(p=>({...p,[id]:val}));setSaved(false);}
+
+  async function handleSave(){
+    if(!note.trim()){setNoteError(true);return;}
+    setNoteError(false);setSaving(true);
+    await set(dbRef,{name:myName,checked,note,expDates,roleId:"aemt",savedAt:new Date().toISOString()});
+    setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
+  }
+
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+
+  return(
+    <div>
+      <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
+        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
+      </div>
+      {warn==="future"&&(
+        <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #ef444466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+          <span style={{fontSize:20}}>⚠️</span>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#94a3b8"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
+        </div>
+      )}
+      {warn==="duplicate"&&!saved&&(
+        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+          <span style={{fontSize:20}}>📋</span>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#94a3b8"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
+        </div>
+      )}
+      <Card>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <span style={{fontSize:26}}>{role.icon}</span>
+          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#64748b"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
+        </div>
+        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
+      </Card>
+      <Card style={{paddingBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#94a3b8"}}>ความคืบหน้าทั้งหมด</span>
+          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#4ade80":"#f59e0b"}}>{doneItems}/{totalItems}</span>
+        </div>
+        <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#4ade80)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
+        </div>
+      </Card>
+      {AEMT_GROUPS.map(group=>{
+        const groupDone=group.items.filter(item=>checked[item.id]).length;
+        return(
+          <Card key={group.id} style={{border:`1.5px solid ${group.color}33`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <span style={{fontSize:22}}>{group.icon}</span>
+              <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:group.color}}>{group.label}</div></div>
+              <span style={{fontSize:12,color:groupDone===group.items.length?"#4ade80":"#f59e0b",fontWeight:700}}>{groupDone}/{group.items.length}</span>
+            </div>
+            {group.items.map(item=>{
+              const ck=!!checked[item.id];
+              return(
+                <div key={item.id}>
+                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(74,222,128,0.08)":"transparent",transition:"background 0.15s"}}>
+                    <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
+                    <span style={{fontSize:14,color:ck?"#4ade80":"#cbd5e1",flex:1}}>{item.label}</span>
+                    {ck&&<span style={{color:"#4ade80",fontSize:13}}>✓</span>}
+                  </label>
+                  {item.hasExp&&ck&&(()=>{
+                    const expVal=expDates[item.id]||"";
+                    const days=daysUntilExp(expVal);
+                    return(
+                      <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)"}}>
+                        <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>📅 วันหมดอายุ (Exp. Date)</div>
+                        <input type="date" value={expVal} onChange={e=>setExp(item.id,e.target.value)}
+                          style={{...BASE_INP,width:"auto",padding:"8px 12px",fontSize:13,colorScheme:"dark"}}/>
+                        {expVal&&<div style={{marginTop:6,fontSize:12,fontWeight:700,color:ettExpColor(days)}}>{ettExpText(days)}</div>}
+                        {days!==null&&days<=30&&days>=0&&(
+                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(245,158,11,0.15)",borderRadius:6,fontSize:12,color:"#fbbf24"}}>
+                            ⚠️ กรุณาแจ้งหัวหน้าเพื่อเบิกของใหม่
+                          </div>
+                        )}
+                        {days!==null&&days<0&&(
+                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(239,68,68,0.15)",borderRadius:6,fontSize:12,color:"#f87171"}}>
+                            🚨 หมดอายุแล้ว! ห้ามใช้ กรุณาเบิกทันที
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
+          </Card>
+        );
+      })}
+      <Card style={{border:noteError?"1.5px solid #ef4444":"undefined"}}>
+        <div style={{fontSize:13,fontWeight:700,color:noteError?"#f87171":"#94a3b8",marginBottom:6}}>
+          📝 เขียนปัญหาหรือข้อเสนอแนะทุกครั้ง หากไม่มีเขียน "ไม่มี" ได้เลย
+          <span style={{color:"#ef4444"}}> *</span>
+        </div>
+        {noteError&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
+        <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);setNoteError(false);}}
+          placeholder='เช่น "ไม่มี" หรือ "อุปกรณ์ชำรุด..."'
+          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #ef4444":BASE_INP.border}}/>
+      </Card>
+      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
+        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
+      </button>
+    </div>
+  );
+}
+
 /* ── General Check Page (AEMT, พขร.) ── */
 function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
   const role=ROLE_MAP[myRole]; const items=equipment[myRole]||[];
@@ -478,6 +675,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
 
   function getTotal(roleId){
     if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    if(roleId==="aemt") return AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
     return (equipment[roleId]||[]).length;
   }
   function getDone(e){ return e?Object.values(e.checked||{}).filter(Boolean).length:0; }
@@ -785,14 +983,14 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
             <div style={{fontSize:13,color:"#94a3b8"}}>สำหรับ {role.label}</div>
           </div>
         </div>
-        {myRole==="para"&&(
-          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(239,68,68,0.1)",borderRadius:8,fontSize:13,color:"#f87171"}}>
-            ℹ️ Para/RN ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
+        {(myRole==="para"||myRole==="aemt")&&(
+          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(59,130,246,0.1)",borderRadius:8,fontSize:13,color:"#93c5fd"}}>
+            ℹ️ {myRole==="para"?"Para/RN":"AEMT"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
           </div>
         )}
       </Card>
 
-      {myRole!=="para"&&(
+      {myRole!=="para"&&myRole!=="aemt"&&(
         <>
           <Card>
             {draft.map((item,i)=>(
@@ -912,7 +1110,8 @@ export default function App(){
           </div>
         )}
         {view==="check"&&myRole==="para"&&<ParaCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
-        {view==="check"&&myRole!=="para"&&<CheckPage myRole={myRole} selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift} equipment={equipment}/>}
+        {view==="check"&&myRole==="aemt"&&<AemtCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
+        {view==="check"&&myRole==="driv"&&<CheckPage myRole={myRole} selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift} equipment={equipment}/>}
         {view==="summary"  &&<SummaryPage   selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="dashboard"&&<DashboardPage selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="settings" &&<SettingsPage  myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
