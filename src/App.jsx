@@ -12,7 +12,7 @@ import { getDatabase, ref, set, onValue } from "firebase-database";
 
 -* ─── Firebase Config ─── *-
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
+  apiKey:            "AIzaSyCW_xpZq3nVeL86NUX5S8W1hbMSzdS4kpk",
   authDomain:        "ems-equipment-mnst.firebaseapp.com",
   databaseURL:       "https:--ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId:         "ems-equipment-mnst",
