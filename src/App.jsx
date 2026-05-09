@@ -371,7 +371,7 @@ function CheckPage({ myRole, selYear, selMonth, selDay, selShift, equipment }) {
     return () => unsub();
   }, [key]);
 
-  function toggle(item) { setChecked(p=>({...p,[item]:!p[item]})); setSaved(false); }
+  function toggle(item) { const k=item.replace(/[.#$/[\]]/g,"_"); setChecked(p=>({...p,[k]:!p[k]})); setSaved(false); }
 
   async function handleSave() {
     setSaving(true);
