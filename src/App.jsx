@@ -306,8 +306,7 @@ function SummaryPage({ selYear, selMonth, equipment, onLock }) {
     }).join("\n")+
     "\n"+"─".repeat(36)+"\nรวม "+rows.length+" เวร";
 
-  if(loading) return React.createElement("div",{style:{textAlign:"center",padding:60,color:"#64748b"}},
-    React.createElement("div",{style:{fontSize:32,marginBottom:12}},"⏳"),"กำลังโหลด...");
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return (
     <div>
