@@ -17,8 +17,8 @@ const firebaseConfig = {
   databaseURL:       "https:--ems-equipment-mnst-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId:         "ems-equipment-mnst",
   storageBucket:     "ems-equipment-mnst.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID",
+  messagingSenderId: "917321944070",
+  appId:             "1:917321944070:web:e5b06fe6554d35aba68787",
 };
 
 const app = initializeApp(firebaseConfig);
