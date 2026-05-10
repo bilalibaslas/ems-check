@@ -32,9 +32,9 @@ const PARA_GROUPS = [
   {
     id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#ef4444",
     items:[
-      {id:"ett",          label:"ETT no 3-8",                                              hasExp:true},
+      {id:"ett",          label:"ETT no 3-8 (ระบุอันที่หมดเร็วสุด)",                       hasExp:true},
       {id:"facemask",     label:"Face mask (ผู้ใหญ่, เด็ก 2 ขนาด)",                        hasExp:false},
-      {id:"ambubag",      label:"Ambubag (3 ขนาด)",                                         hasExp:true},
+      {id:"ambubag",      label:"Ambubag (3 ขนาด) (ระบุอันที่หมดเร็วสุด)",                  hasExp:true},
       {id:"reservoir",    label:"Reservoir bag (ผู้ใหญ่, เด็ก)",                            hasExp:false},
       {id:"lma",          label:"LMA no 3",                                                  hasExp:false},
       {id:"csuction",     label:"Closed suction (ใช้แล้วเบิกด้วย)",                          hasExp:false},
@@ -216,7 +216,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
   const [note,setNote]=useState(""); const [expDates,setExpDates]=useState({});
   const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
-  const [noteError,setNoteError]=useState(false);
+  const [noteError,setNoteError]=useState(false); const [showSuccess,setShowSuccess]=useState(false);
 
   const totalItems=PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
   const doneItems=PARA_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -226,7 +226,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data){
+      if(data&&data.savedAt){
         setMyName(data.name||"");setChecked(data.checked||{});
         setNote(data.note||"");setExpDates(data.expDates||{});
         if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
@@ -241,8 +241,11 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
   async function handleSave(){
     if(!note.trim()){setNoteError(true);return;}
     setNoteError(false);setSaving(true);
+    const paraTotal=PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    const paraDone=PARA_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
     await set(dbRef,{name:myName,checked,note,expDates,roleId:"para",savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
+    if(paraDone===paraTotal&&note.trim()) setShowSuccess(true);
   }
 
   function getExpDays(id){ return daysUntilExp(expDates[id]||""); }
@@ -252,6 +255,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
 
   return(
     <div>
+      {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       {/* date badge */}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
@@ -413,6 +417,7 @@ const AEMT_GROUPS = [
       {id:"reddot",     label:"Reddot",                                               hasExp:false},
       {id:"scissors",   label:"กรรไกร",                                               hasExp:false},
       {id:"mci",        label:"ชุด MCI (กระเป๋า Tag, เทป, กรวย)",                    hasExp:false},
+      {id:"redbag",      label:"ถุงแดง",                                                  hasExp:false},
     ]
   },
   {
@@ -477,7 +482,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   const [scratchNote,setScratchNote]=useState("");
   const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
-  const [noteError,setNoteError]=useState(false);
+  const [noteError,setNoteError]=useState(false); const [showSuccess,setShowSuccess]=useState(false);
 
   const totalItems=DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
   const doneItems=DRIV_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -487,7 +492,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data){
+      if(data&&data.savedAt){
         setMyName(data.name||"");setChecked(data.checked||{});
         setNote(data.note||"");setO2Levels(data.o2Levels||{});
         setScratchNote(data.scratchNote||"");
@@ -504,14 +509,18 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   async function handleSave(){
     if(!note.trim()){setNoteError(true);return;}
     setNoteError(false);setSaving(true);
+    const drivTotal=DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    const drivDone=DRIV_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
     await set(dbRef,{name:myName,checked,note,o2Levels,scratchNote,roleId:"driv",savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
+    if(drivDone===drivTotal&&note.trim()) setShowSuccess(true);
   }
 
   if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
+      {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
         {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
@@ -523,9 +532,14 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
-          <span style={{fontSize:20}}>📋</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#94a3b8"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
+        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:myName?"8px":"0"}}>
+            <span style={{fontSize:20}}>⚠️</span>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
+              <div style={{fontSize:12,color:"#94a3b8"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
+            </div>
+          </div>
         </div>
       )}
       <Card>
@@ -629,7 +643,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   const [note,setNote]=useState(""); const [expDates,setExpDates]=useState({});
   const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
-  const [noteError,setNoteError]=useState(false);
+  const [noteError,setNoteError]=useState(false); const [showSuccess,setShowSuccess]=useState(false);
 
   const totalItems=AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
   const doneItems=AEMT_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -639,7 +653,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data){
+      if(data&&data.savedAt){
         setMyName(data.name||"");setChecked(data.checked||{});
         setNote(data.note||"");setExpDates(data.expDates||{});
         if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
@@ -657,12 +671,14 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
     setNoteError(false);setSaving(true);
     await set(dbRef,{name:myName,checked,note,expDates,roleId:"aemt",savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
+    if(doneItems===totalItems&&note.trim()) setShowSuccess(true);
   }
 
   if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
+      {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
         {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
@@ -674,9 +690,14 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
-          <span style={{fontSize:20}}>📋</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#94a3b8"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
+        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:myName?"8px":"0"}}>
+            <span style={{fontSize:20}}>⚠️</span>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
+              <div style={{fontSize:12,color:"#94a3b8"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
+            </div>
+          </div>
         </div>
       )}
       <Card>
@@ -773,7 +794,7 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data){setMyName(data.name||"");setChecked(data.checked||{});setNote(data.note||"");
+      if(data&&data.savedAt){setMyName(data.name||"");setChecked(data.checked||{});setNote(data.note||"");
         if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
       } else {setMyName("");setChecked({});setNote("");}
       setLoading(false);setSaved(false);
@@ -795,6 +816,7 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
 
   return(
     <div>
+      {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
         {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
@@ -806,9 +828,14 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
-          <span style={{fontSize:20}}>📋</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#94a3b8"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
+        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:myName?"8px":"0"}}>
+            <span style={{fontSize:20}}>⚠️</span>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
+              <div style={{fontSize:12,color:"#94a3b8"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
+            </div>
+          </div>
         </div>
       )}
       <Card>
@@ -959,7 +986,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
   const [delMode,setDelMode]=useState(false);
   const [delDay,setDelDay]=useState(1); const [delShift,setDelShift]=useState("เช้า");
   const [delRole,setDelRole]=useState("para"); const [deleting,setDeleting]=useState(false);
-  const [delDone,setDelDone]=useState(false);
+  const [delDone,setDelDone]=useState(false); const [expandedRow,setExpandedRow]=useState(null);
 
   useEffect(()=>{
     setLoading(true);
@@ -1223,6 +1250,72 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
         </button>
         <div style={{fontSize:12,color:"#475569",marginTop:10,textAlign:"center"}}>PIN เริ่มต้น: 1234</div>
       </Card>
+    </div>
+  );
+}
+
+/* ── Success Screen ── */
+function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,note,savedAt,onClose}){
+  const sm=SHIFT_META[selShift];
+  const timeStr=savedAt?new Date(savedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}):"";
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16,overflowY:"auto"}}>
+      <div style={{background:"linear-gradient(135deg,#0f172a,#1e293b)",borderRadius:20,padding:28,maxWidth:400,width:"100%",border:"2px solid #4ade8055",boxShadow:"0 0 60px rgba(74,222,128,0.25)"}}>
+        
+        {/* Header - screenshot area */}
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontSize:56,marginBottom:10,animation:"bounce 0.6s ease"}}>✅</div>
+          <div style={{fontSize:20,fontWeight:900,color:"#4ade80",marginBottom:4}}>เช็คเสร็จสมบูรณ์!</div>
+          <div style={{fontSize:12,color:"#64748b"}}>ขอบคุณสำหรับความร่วมมือ ขอให้เป็นวันที่ดี 🍀</div>
+        </div>
+
+        {/* Report card - screenshot friendly */}
+        <div style={{background:"#0f172a",border:"1.5px solid #4ade8044",borderRadius:14,padding:18,marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,paddingBottom:12,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+            <div style={{fontSize:28}}>🚑</div>
+            <div>
+              <div style={{fontSize:13,fontWeight:800,color:"#f1f5f9"}}>EMS Equipment Check</div>
+              <div style={{fontSize:11,color:"#64748b"}}>รพ.มหาราช นครศรีธรรมราช</div>
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>ผู้ตรวจเช็ค</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{role.icon} {role.short}</div>
+              <div style={{fontSize:13,color:"#f1f5f9",marginTop:2}}>{myName||"-"}</div>
+            </div>
+            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>วันที่/เวร</div>
+              <div style={{fontSize:13,fontWeight:700,color:sm.accent}}>{sm.icon} เวร{selShift}</div>
+              <div style={{fontSize:12,color:"#f1f5f9",marginTop:2}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</div>
+            </div>
+          </div>
+
+          <div style={{background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>ผลการตรวจเช็ค</div>
+            <div style={{fontSize:15,fontWeight:900,color:"#4ade80"}}>✓ ครบ {totalItems} รายการ</div>
+            {timeStr&&<div style={{fontSize:11,color:"#64748b",marginTop:4}}>บันทึกเมื่อ {timeStr} น.</div>}
+          </div>
+
+          {note&&(
+            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>📝 ปัญหา/ข้อเสนอแนะ</div>
+              <div style={{fontSize:13,color:"#f1f5f9"}}>{note}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Warning if duplicate */}
+        <div style={{fontSize:11,color:"#64748b",textAlign:"center",marginBottom:14}}>
+          📸 แคปหน้าจอตรงนี้ได้เลยค่ะ แล้วกด "กลับหน้าหลัก"
+        </div>
+
+        <button onClick={onClose} style={{width:"100%",padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:"linear-gradient(90deg,#16a34a,#15803d)",color:"#fff"}}>
+          กลับหน้าหลัก
+        </button>
+      </div>
+      <style>{`@keyframes bounce{0%{transform:scale(0)}60%{transform:scale(1.2)}100%{transform:scale(1)}}`}</style>
     </div>
   );
 }
