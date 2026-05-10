@@ -226,11 +226,8 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data&&data.savedAt){
-        setMyName(data.name||"");setChecked(data.checked||{});
-        setNote(data.note||"");setExpDates(data.expDates||{});
-        if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
-      } else {setMyName("");setChecked({});setNote("");setExpDates({});}
+      setMyName("");setChecked({});setNote("");setExpDates({});
+      if(data&&data.savedAt&&!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
       setLoading(false);setSaved(false);
     });
     return()=>u();
@@ -492,12 +489,8 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data&&data.savedAt){
-        setMyName(data.name||"");setChecked(data.checked||{});
-        setNote(data.note||"");setO2Levels(data.o2Levels||{});
-        setScratchNote(data.scratchNote||"");
-        if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
-      } else {setMyName("");setChecked({});setNote("");setO2Levels({});setScratchNote("");}
+      setMyName("");setChecked({});setNote("");setO2Levels({});setScratchNote("");
+      if(data&&data.savedAt&&!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
       setLoading(false);setSaved(false);
     });
     return()=>u();
@@ -653,11 +646,8 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data&&data.savedAt){
-        setMyName(data.name||"");setChecked(data.checked||{});
-        setNote(data.note||"");setExpDates(data.expDates||{});
-        if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
-      } else {setMyName("");setChecked({});setNote("");setExpDates({});}
+      setMyName("");setChecked({});setNote("");setExpDates({});
+      if(data&&data.savedAt&&!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
       setLoading(false);setSaved(false);
     });
     return()=>u();
@@ -794,9 +784,8 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
     if(isFutureDate(selYear,selMonth,selDay)) setWarn("future"); else setWarn(null);
     const u=onValue(dbRef,snap=>{
       const data=snap.val();
-      if(data&&data.savedAt){setMyName(data.name||"");setChecked(data.checked||{});setNote(data.note||"");
-        if(!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
-      } else {setMyName("");setChecked({});setNote("");}
+      setMyName("");setChecked({});setNote("");
+      if(data&&data.savedAt&&!isFutureDate(selYear,selMonth,selDay)) setWarn("duplicate");
       setLoading(false);setSaved(false);
     });
     return()=>u();
@@ -942,29 +931,55 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
           </div>
           {rows.map(({day,shift,roleResults},idx)=>{
             const sm=SHIFT_META[shift];
+            const rowKey=`${day}_${shift}`;
+            const isExp=expandedRow===rowKey;
             return(
-              <Card key={idx} style={{marginBottom:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                  <div style={{padding:"4px 12px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.accent+"22",color:sm.accent}}>
-                    {sm.icon+" "+day+" "+MONTH_NAMES[selMonth].slice(0,3)+" · เวร"+shift}
+              <div key={idx} style={{marginBottom:8,background:"rgba(255,255,255,0.05)",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.08)"}}>
+                {/* clickable header */}
+                <div onClick={()=>setExpandedRow(isExp?null:rowKey)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",cursor:"pointer",userSelect:"none"}}>
+                  <div style={{padding:"4px 10px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.accent+"22",color:sm.accent}}>
+                    {sm.icon} {day} {MONTH_NAMES[selMonth].slice(0,3)} · เวร{shift}
+                  </div>
+                  <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+                    {roleResults.map(r=>{
+                      const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
+                      return <span key={r.role.id} style={{fontSize:16}}>{ok?"✅":"❌"}</span>;
+                    })}
+                    <span style={{fontSize:12,color:"#64748b",marginLeft:4}}>{isExp?"▲":"▼"}</span>
                   </div>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {roleResults.map(r=>{
-                    const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
-                    return(
-                      <div key={r.role.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:ok?"rgba(74,222,128,0.06)":"rgba(239,68,68,0.06)",border:"1px solid "+(ok?"#4ade8033":"#ef444433")}}>
-                        <span style={{fontSize:18}}>{r.role.icon}</span>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:13,fontWeight:700,color:r.role.color}}>{r.role.short}</div>
-                          <div style={{fontSize:12,color:"#94a3b8"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
+                {/* expandable detail */}
+                {isExp&&(
+                  <div style={{padding:"0 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                    {roleResults.map(r=>{
+                      const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
+                      return(
+                        <div key={r.role.id} style={{display:"flex",flexDirection:"column",gap:4,padding:"10px 12px",borderRadius:8,background:ok?"rgba(74,222,128,0.06)":"rgba(239,68,68,0.06)",border:"1px solid "+(ok?"#4ade8033":"#ef444433")}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
+                            <span style={{fontSize:18}}>{r.role.icon}</span>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:13,fontWeight:700,color:r.role.color}}>{r.role.short}</div>
+                              <div style={{fontSize:12,color:"#94a3b8"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
+                            </div>
+                            <div style={{fontSize:12,color:ok?"#4ade80":"#f87171",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
+                          </div>
+                          {r.entry?.note&&(
+                            <div style={{fontSize:12,color:"#94a3b8",padding:"6px 10px",background:"rgba(255,255,255,0.04)",borderRadius:6}}>
+                              📝 {r.entry.note}
+                            </div>
+                          )}
+                          {r.entry?.savedAt&&(
+                            <div style={{fontSize:11,color:"#475569"}}>
+                              🕐 บันทึกเมื่อ {new Date(r.entry.savedAt).toLocaleString("th-TH",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"short"})}
+                            </div>
+                          )}
                         </div>
-                        <div style={{fontSize:12,color:ok?"#4ade80":"#f87171",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
           <Card>
@@ -1371,19 +1386,10 @@ export default function App(){
       <div style={{maxWidth:720,margin:"0 auto",padding:"18px 14px"}}>
         {view!=="settings"&&(
           <div style={{background:"rgba(255,255,255,0.05)",borderRadius:14,padding:"13px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:13,opacity:.65}}>เดือน/ปี:</span>
-            <select value={selMonth} onChange={e=>setSelMonth(+e.target.value)} style={BASE_SEL}>
-              {MONTH_NAMES.map((m,i)=><option key={i} value={i}>{m}</option>)}
-            </select>
-            <select value={selYear} onChange={e=>setSelYear(+e.target.value)} style={BASE_SEL}>
-              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y+543}</option>)}
-            </select>
-            {view==="check"&&(
+            {view==="check"?(
               <>
-                <span style={{fontSize:13,opacity:.65}}>วันที่:</span>
-                <select value={selDay} onChange={e=>setSelDay(+e.target.value)} style={BASE_SEL}>
-                  {Array.from({length:getDays(selYear,selMonth)},(_,i)=>i+1).map(d=><option key={d} value={d}>{d}</option>)}
-                </select>
+                <span style={{fontSize:13,color:"#94a3b8"}}>📅 วันนี้:</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{td} {MONTH_NAMES[tm]} {ty+543}</span>
                 <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
                   {SHIFTS.map(s=>(
                     <button key={s} onClick={()=>setSelShift(s)} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s].accent:"rgba(255,255,255,0.07)",color:selShift===s?"#fff":"#94a3b8",transition:"all 0.2s"}}>
@@ -1391,6 +1397,16 @@ export default function App(){
                     </button>
                   ))}
                 </div>
+              </>
+            ):(
+              <>
+                <span style={{fontSize:13,opacity:.65}}>เดือน/ปี:</span>
+                <select value={selMonth} onChange={e=>setSelMonth(+e.target.value)} style={BASE_SEL}>
+                  {MONTH_NAMES.map((m,i)=><option key={i} value={i}>{m}</option>)}
+                </select>
+                <select value={selYear} onChange={e=>setSelYear(+e.target.value)} style={BASE_SEL}>
+                  {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y+543}</option>)}
+                </select>
               </>
             )}
           </div>
