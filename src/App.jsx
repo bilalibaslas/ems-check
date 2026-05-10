@@ -93,7 +93,29 @@ function ls(key,fb){try{const v=localStorage.getItem(key);return v?JSON.parse(v)
 function ss(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch{}}
 function getDays(y,m){return new Date(y,m+1,0).getDate();}
 function recKey(y,m,d,shift,roleId){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}_${shift}_${roleId}`;}
-function todayParts(){const t=new Date();return{year:t.getFullYear(),month:t.getMonth(),day:t.getDate()};}
+function getThaiNow(){
+  return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Bangkok"}));
+}
+function getShiftAndDate(){
+  const now=getThaiNow();
+  const totalMin=now.getHours()*60+now.getMinutes();
+  let shift,dateRef=new Date(now);
+  if(totalMin>=8*60+15&&totalMin<16*60+15){
+    shift="เช้า";
+  } else if(totalMin>=16*60+15){
+    shift="บ่าย";
+  } else if(totalMin<15){
+    // 00:00-00:14 ยังเป็นเวรบ่ายของเมื่อวาน
+    shift="บ่าย";
+    dateRef.setDate(dateRef.getDate()-1);
+  } else {
+    // 00:15-08:14 เวรดึกของเมื่อวาน
+    shift="ดึก";
+    dateRef.setDate(dateRef.getDate()-1);
+  }
+  return{shift,year:dateRef.getFullYear(),month:dateRef.getMonth(),day:dateRef.getDate()};
+}
+function todayParts(){const t=getThaiNow();return{year:t.getFullYear(),month:t.getMonth(),day:t.getDate()};}
 function sanitizeKey(str){return str.replace(/[.#$/[\]/\s]/g,"_");}
 function isFutureDate(y,m,d){const t=new Date();t.setHours(0,0,0,0);return new Date(y,m,d)>t;}
 
@@ -1338,10 +1360,11 @@ function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,
 /* ── Root App ── */
 export default function App(){
   const {year:ty,month:tm,day:td}=todayParts();
+  const {shift:autoShift,year:shiftYear,month:shiftMonth,day:shiftDay}=getShiftAndDate();
   const [myRole,setMyRole]=useState(()=>ls(KEY_ROLE,null));
   const [view,setView]=useState("check");
-  const [selYear,setSelYear]=useState(ty); const [selMonth,setSelMonth]=useState(tm);
-  const [selDay,setSelDay]=useState(td); const [selShift,setSelShift]=useState("เช้า");
+  const [selYear,setSelYear]=useState(shiftYear); const [selMonth,setSelMonth]=useState(shiftMonth);
+  const [selDay,setSelDay]=useState(shiftDay); const [selShift,setSelShift]=useState(autoShift);
   const [equipment,setEquipment]=useState(DEFAULT_EQUIPMENT);
   const [pinUnlocked,setPinUnlocked]=useState(()=>{const t=ls(PIN_SESSION_KEY,0);return t&&(Date.now()-t)<8*60*60*1000;});
 
@@ -1388,11 +1411,21 @@ export default function App(){
           <div style={{background:"rgba(255,255,255,0.05)",borderRadius:14,padding:"13px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
             {view==="check"?(
               <>
-                <span style={{fontSize:13,color:"#94a3b8"}}>📅 วันนี้:</span>
-                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{td} {MONTH_NAMES[tm]} {ty+543}</span>
+                <span style={{fontSize:13,color:"#94a3b8"}}>📅</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</span>
                 <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
                   {SHIFTS.map(s=>(
-                    <button key={s} onClick={()=>setSelShift(s)} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s].accent:"rgba(255,255,255,0.07)",color:selShift===s?"#fff":"#94a3b8",transition:"all 0.2s"}}>
+                    <button key={s} onClick={()=>{
+                      const sd=getShiftAndDate();
+                      setSelShift(s);
+                      // เวรดึกใช้วันเมื่อวาน ถ้าเวลาปัจจุบันอยู่ในช่วงเวรดึก
+                      if(s==="ดึก"){
+                        const now=getThaiNow(); const h=now.getHours(); const m=now.getMinutes();
+                        const inDirk=(h*60+m)<8*60+15;
+                        if(inDirk){const y=new Date(getThaiNow());y.setDate(y.getDate()-1);setSelYear(y.getFullYear());setSelMonth(y.getMonth());setSelDay(y.getDate());}
+                        else{setSelYear(shiftYear);setSelMonth(shiftMonth);setSelDay(shiftDay);}
+                      } else {setSelYear(shiftYear);setSelMonth(shiftMonth);setSelDay(shiftDay);}
+                    }} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s].accent:"rgba(255,255,255,0.07)",color:selShift===s?"#fff":"#94a3b8",transition:"all 0.2s"}}>
                       {SHIFT_META[s].icon} {s}
                     </button>
                   ))}
