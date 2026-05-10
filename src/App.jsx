@@ -15,7 +15,7 @@ const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 const ROLES = [
-  { id:"para", label:"Paramedic / ENP / RN", short:"Para/RN", icon:"🩺", color:"#ef4444" },
+  { id:"para", label:"Paramedic / ENP / RN", short:"Para/ENP/RN", icon:"🩺", color:"#ef4444" },
   { id:"aemt", label:"AEMT",                  short:"AEMT",    icon:"🚑", color:"#3b82f6" },
   { id:"driv", label:"พขร.",                  short:"พขร.",    icon:"🚗", color:"#10b981" },
 ];
@@ -1043,7 +1043,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
     setDeleting(false);setDelDone(true);setTimeout(()=>setDelDone(false),2000);
   }
 
-  function getTotal(roleId){ if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0); return (equipment[roleId]||[]).length; }
+  function getTotal(roleId){ if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0); if(roleId==="aemt") return AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0); if(roleId==="driv") return DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0); return (equipment[roleId]||[]).length; }
   function getDone(e){ return e?Object.values(e.checked||{}).filter(Boolean).length:0; }
 
   const days=getDays(selYear,selMonth);
