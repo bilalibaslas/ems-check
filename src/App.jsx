@@ -21,6 +21,7 @@ const ROLES = [
 ];
 const ROLE_MAP = Object.fromEntries(ROLES.map(r=>[r.id,r]));
 const SHIFTS = ["เช้า","บ่าย","ดึก"];
+const DRIV_SHIFTS = ["เช้า","บ่าย/ดึก"];
 const SHIFT_META = {
   "เช้า":{accent:"#F59E0B",icon:"🌅"},
   "บ่าย":{accent:"#3B82F6",icon:"🌤"},
@@ -92,10 +93,14 @@ const KEY_ROLE = "ems_my_role";
 function ls(key,fb){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fb;}catch{return fb;}}
 function ss(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch{}}
 function getDays(y,m){return new Date(y,m+1,0).getDate();}
-function recKey(y,m,d,shift,roleId){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}_${shift}_${roleId}`;}
+function recKey(y,m,d,shift,roleId){
+  const s=(roleId==="driv"&&(shift==="บ่าย"||shift==="ดึก"))?"บ่าย/ดึก":shift;
+  return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}_${s}_${roleId}`;
+}
 function getThaiNow(){
   return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Bangkok"}));
 }
+function getDrivShift(shift){ return (shift==="บ่าย"||shift==="ดึก")?"บ่าย/ดึก":shift; }
 function getShiftAndDate(){
   const now=getThaiNow();
   const totalMin=now.getHours()*60+now.getMinutes();
@@ -923,6 +928,8 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
       if(!allOK) rows.push({day:d,shift,roleResults});
     }
   }
+  // Remove duplicate driv rows (บ่าย and ดึก both map to บ่าย/ดึก)
+  // Already handled by recKey
 
   const copyText="สรุปเวรที่ไม่ได้เช็คอุปกรณ์ EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)+"\n"+"─".repeat(36)+"\n"+
     rows.map(({day,shift,roleResults})=>{
@@ -1361,7 +1368,9 @@ function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,
 /* ── Root App ── */
 export default function App(){
   const {year:ty,month:tm,day:td}=todayParts();
-  const {shift:autoShift,year:shiftYear,month:shiftMonth,day:shiftDay}=getShiftAndDate();
+  const _shiftData=getShiftAndDate();
+  const autoShift=myRole==="driv"?getDrivShift(_shiftData.shift):_shiftData.shift;
+  const {year:shiftYear,month:shiftMonth,day:shiftDay}=_shiftData;
   const [myRole,setMyRole]=useState(()=>ls(KEY_ROLE,null));
   const [view,setView]=useState("check");
   const [selYear,setSelYear]=useState(shiftYear); const [selMonth,setSelMonth]=useState(shiftMonth);
@@ -1415,19 +1424,16 @@ export default function App(){
                 <span style={{fontSize:13,color:"#94a3b8"}}>📅</span>
                 <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</span>
                 <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
-                  {SHIFTS.map(s=>(
+                  {(myRole==="driv"?DRIV_SHIFTS:SHIFTS).map(s=>(
                     <button key={s} onClick={()=>{
-                      const sd=getShiftAndDate();
                       setSelShift(s);
-                      // เวรดึกใช้วันเมื่อวาน ถ้าเวลาปัจจุบันอยู่ในช่วงเวรดึก
-                      if(s==="ดึก"){
-                        const now=getThaiNow(); const h=now.getHours(); const m=now.getMinutes();
-                        const inDirk=(h*60+m)<8*60+15;
-                        if(inDirk){const y=new Date(getThaiNow());y.setDate(y.getDate()-1);setSelYear(y.getFullYear());setSelMonth(y.getMonth());setSelDay(y.getDate());}
+                      if(s==="ดึก"||s==="บ่าย/ดึก"){
+                        const now=getThaiNow(); const totalMin=now.getHours()*60+now.getMinutes();
+                        if(totalMin<8*60+15){const y=new Date(getThaiNow());y.setDate(y.getDate()-1);setSelYear(y.getFullYear());setSelMonth(y.getMonth());setSelDay(y.getDate());}
                         else{setSelYear(shiftYear);setSelMonth(shiftMonth);setSelDay(shiftDay);}
                       } else {setSelYear(shiftYear);setSelMonth(shiftMonth);setSelDay(shiftDay);}
-                    }} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s].accent:"rgba(255,255,255,0.07)",color:selShift===s?"#fff":"#94a3b8",transition:"all 0.2s"}}>
-                      {SHIFT_META[s].icon} {s}
+                    }} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s]?.accent||"#7C3AED":"rgba(255,255,255,0.07)",color:selShift===s?"#fff":"#94a3b8",transition:"all 0.2s"}}>
+                      {SHIFT_META[s]?.icon||"🌆"} {s}
                     </button>
                   ))}
                 </div>
