@@ -893,6 +893,7 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
 /* ── Summary Page ── */
 function SummaryPage({selYear,selMonth,equipment,onLock}){
   const [allData,setAllData]=useState({}); const [loading,setLoading]=useState(true);
+  const [expandedRow,setExpandedRow]=useState(null);
   useEffect(()=>{
     setLoading(true);
     const u=onValue(ref(db,"records"),snap=>{
