@@ -17,7 +17,7 @@ const db  = getDatabase(app);
 const ROLES = [
   { id:"para", label:"Paramedic / ENP / RN", short:"Para/ENP/RN", icon:"🩺", color:"#ef4444" },
   { id:"aemt", label:"AEMT",                  short:"AEMT",    icon:"🚑", color:"#3b82f6" },
-  { id:"driv", label:"บ/ด",                  short:"บ/ด",    icon:"🚗", color:"#10b981" },
+  { id:"driv", label:"พนักงานขับรถ",                  short:"พนักงานขับรถ",    icon:"🚗", color:"#10b981" },
 ];
 const ROLE_MAP = Object.fromEntries(ROLES.map(r=>[r.id,r]));
 const SHIFTS = ["เช้า","บ่าย","ดึก"];
@@ -25,6 +25,7 @@ const SHIFT_META = {
   "เช้า":{accent:"#F59E0B",icon:"🌅"},
   "บ่าย":{accent:"#3B82F6",icon:"🌤"},
   "ดึก": {accent:"#7C3AED",icon:"🌙"},
+  "บ่าย/ดึก":{accent:"#6366f1",icon:"🌆"},
 };
 
 /* ── Para/RN grouped items ── */
@@ -89,6 +90,7 @@ const PIN_SESSION_KEY = "ems_pin_unlocked";
 const MONTH_NAMES = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
 const KEY_ROLE = "ems_my_role";
 
+const DRIV_SHIFTS = ["เช้า","บ่าย/ดึก"];
 function ls(key,fb){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fb;}catch{return fb;}}
 function ss(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch{}}
 function getDays(y,m){return new Date(y,m+1,0).getDate();}
@@ -453,7 +455,7 @@ const AEMT_GROUPS = [
 ];
 
 
-/* ── บ/ด grouped items ── */
+/* ── พนักงานขับรถ grouped items ── */
 const DRIV_GROUPS = [
   {
     id:"equipment", label:"1. อุปกรณ์ในรถ", icon:"🚑", color:"#10b981",
@@ -491,7 +493,7 @@ const DRIV_GROUPS = [
   },
 ];
 
-/* ── บ/ด Check Page ── */
+/* ── พนักงานขับรถ Check Page ── */
 function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   const role=ROLE_MAP["driv"]; const shiftMeta=SHIFT_META[selShift];
   const key=recKey(selYear,selMonth,selDay,selShift,"driv");
@@ -791,7 +793,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   );
 }
 
-/* ── General Check Page (AEMT, บ/ด) ── */
+/* ── General Check Page (AEMT, พนักงานขับรถ) ── */
 function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
   const role=ROLE_MAP[myRole]; const items=equipment[myRole]||[];
   const key=recKey(selYear,selMonth,selDay,selShift,myRole);
@@ -1243,7 +1245,7 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
         </div>
         {(myRole==="para"||myRole==="aemt"||myRole==="driv")&&(
           <div style={{marginTop:10,padding:"10px 14px",background:"rgba(16,185,129,0.1)",borderRadius:8,fontSize:13,color:"#6ee7b7"}}>
-            ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"บ/ด"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
+            ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"พนักงานขับรถ"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
           </div>
         )}
       </Card>
@@ -1415,7 +1417,7 @@ export default function App(){
                 <span style={{fontSize:13,color:"#94a3b8"}}>📅</span>
                 <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</span>
                 <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
-                  {SHIFTS.map(s=>(
+                  {(myRole==="driv"?DRIV_SHIFTS:SHIFTS).map(s=>(
                     <button key={s} onClick={()=>{
                       const sd=getShiftAndDate();
                       setSelShift(s);
