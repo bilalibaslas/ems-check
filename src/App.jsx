@@ -1043,7 +1043,12 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
     setDeleting(false);setDelDone(true);setTimeout(()=>setDelDone(false),2000);
   }
 
-  function getTotal(roleId){ if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0); return (equipment[roleId]||[]).length; }
+  function getTotal(roleId){
+    if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    if(roleId==="aemt") return AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    if(roleId==="driv") return DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
+    return (equipment[roleId]||[]).length;
+  }
   function getDone(e){ return e?Object.values(e.checked||{}).filter(Boolean).length:0; }
 
   const days=getDays(selYear,selMonth);
