@@ -17,7 +17,7 @@ const db  = getDatabase(app);
 const ROLES = [
   { id:"para", label:"Paramedic / ENP / RN", short:"Para/ENP/RN", icon:"🩺", color:"#ef4444" },
   { id:"aemt", label:"AEMT",                  short:"AEMT",    icon:"🚑", color:"#3b82f6" },
-  { id:"driv", label:"พขร.",                  short:"พขร.",    icon:"🚗", color:"#10b981" },
+  { id:"driv", label:"บ/ด",                  short:"บ/ด",    icon:"🚗", color:"#10b981" },
 ];
 const ROLE_MAP = Object.fromEntries(ROLES.map(r=>[r.id,r]));
 const SHIFTS = ["เช้า","บ่าย","ดึก"];
@@ -453,7 +453,7 @@ const AEMT_GROUPS = [
 ];
 
 
-/* ── พขร. grouped items ── */
+/* ── บ/ด grouped items ── */
 const DRIV_GROUPS = [
   {
     id:"equipment", label:"1. อุปกรณ์ในรถ", icon:"🚑", color:"#10b981",
@@ -491,7 +491,7 @@ const DRIV_GROUPS = [
   },
 ];
 
-/* ── พขร. Check Page ── */
+/* ── บ/ด Check Page ── */
 function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   const role=ROLE_MAP["driv"]; const shiftMeta=SHIFT_META[selShift];
   const key=recKey(selYear,selMonth,selDay,selShift,"driv");
@@ -791,7 +791,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   );
 }
 
-/* ── General Check Page (AEMT, พขร.) ── */
+/* ── General Check Page (AEMT, บ/ด) ── */
 function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
   const role=ROLE_MAP[myRole]; const items=equipment[myRole]||[];
   const key=recKey(selYear,selMonth,selDay,selShift,myRole);
@@ -1243,7 +1243,7 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
         </div>
         {(myRole==="para"||myRole==="aemt"||myRole==="driv")&&(
           <div style={{marginTop:10,padding:"10px 14px",background:"rgba(16,185,129,0.1)",borderRadius:8,fontSize:13,color:"#6ee7b7"}}>
-            ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"พขร."} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
+            ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"บ/ด"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
           </div>
         )}
       </Card>
