@@ -15,23 +15,23 @@ const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 const ROLES = [
-  { id:"para", label:"Paramedic / ENP / RN", short:"Para/ENP/RN", icon:"🩺", color:"#ef4444" },
-  { id:"aemt", label:"AEMT",                  short:"AEMT",    icon:"🚑", color:"#3b82f6" },
-  { id:"driv", label:"พนักงานขับรถ",                  short:"พนักงานขับรถ",    icon:"🚗", color:"#10b981" },
+  { id:"para", label:"Paramedic / ENP / RN", short:"Para/ENP/RN", icon:"🩺", color:"#e25c86" },
+  { id:"aemt", label:"AEMT",                  short:"AEMT",    icon:"🚑", color:"#6a8df5" },
+  { id:"driv", label:"พนักงานขับรถ",                  short:"พนักงานขับรถ",    icon:"🚗", color:"#2bb594" },
 ];
 const ROLE_MAP = Object.fromEntries(ROLES.map(r=>[r.id,r]));
 const SHIFTS = ["เช้า","บ่าย","ดึก"];
 const SHIFT_META = {
-  "เช้า":{accent:"#F59E0B",icon:"🌅"},
-  "บ่าย":{accent:"#3B82F6",icon:"🌤"},
-  "ดึก": {accent:"#7C3AED",icon:"🌙"},
-  "บ่าย/ดึก":{accent:"#6366f1",icon:"🌆"},
+  "เช้า":{accent:"#e08a2e",icon:"🌅"},
+  "บ่าย":{accent:"#4a86e8",icon:"☀️"},
+  "ดึก": {accent:"#8a6cf0",icon:"🌙"},
+  "บ่าย/ดึก":{accent:"#7c8cf0",icon:"🌇"},
 };
 
 /* ── Para/RN grouped items ── */
 const PARA_GROUPS = [
   {
-    id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#ef4444",
+    id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#e25c86",
     items:[
       {id:"ett",          label:"ETT no 3-8 (ระบุอันที่หมดเร็วสุด)",                       hasExp:true},
       {id:"facemask",     label:"Face mask (ผู้ใหญ่, เด็ก 2 ขนาด)",                        hasExp:false},
@@ -50,7 +50,7 @@ const PARA_GROUPS = [
     ]
   },
   {
-    id:"ivdrug", label:"2. IV Set and Drug", icon:"💉", color:"#3b82f6",
+    id:"ivdrug", label:"2. IV Set and Drug", icon:"💉", color:"#6a8df5",
     items:[
       {id:"ivset",        label:"Set IV (Set IV, 3-Ways, Extension) อย่างละ 2 ชุด",         hasExp:false},
       {id:"tourniquet",   label:"Tourniquet",                                                hasExp:false},
@@ -71,7 +71,7 @@ const PARA_GROUPS = [
     ]
   },
   {
-    id:"monitor", label:"3. Monitoring Equipment", icon:"📟", color:"#10b981",
+    id:"monitor", label:"3. Monitoring Equipment", icon:"📟", color:"#2bb594",
     items:[
       {id:"shilley",      label:"Shilley (Calibrate ด้วย) + แผ่น Pads",                    hasExp:false},
       {id:"stethoscope",  label:"Stethoscope",                                               hasExp:false},
@@ -125,10 +125,14 @@ const ROSTER_ALL=[
   {id:"a",      label:"ไม้ A",           day:true},
   {id:"a1",     label:"ไม้ A1",          night:true},
   {id:"a2",     label:"ไม้ A2",          night:true},
+  {id:"ph1",    label:"ไม้ Pre-hos (หลัก)", optional:true},
+  {id:"ph2",    label:"ไม้ Pre-hos (เสริม)", optional:true},
   {id:"aemt",   label:"A-EMT"},
   {id:"driv",   label:"พขร."},
   {id:"vehicle",label:"ทะเบียนรถที่ใช้"},
 ];
+// ช่อง optional (ไม้ Pre-hos) แสดงในรายงานเฉพาะเวรที่มีคนอยู่
+function shownFields(shift,r){return rosterFieldsFor(shift).filter(f=>!f.optional||(r&&r[f.id]));}
 function rosterFieldsFor(shift){
   const night=shift==="ดึก";
   return ROSTER_ALL.filter(f=>night?!f.day:!f.night);
@@ -145,7 +149,7 @@ function buildShiftReport(y,m,d,shift,r,checks){
     "รายงานเวร EMS รพ.มหาราช นศ.",
     `เวร : ${shift}`,
     `วันที่ : ${d} ${MONTH_NAMES[m]} ${y+543}`,
-    ...rosterFieldsFor(shift).map(f=>`${f.label} : ${r[f.id]||"-"}`),
+    ...shownFields(shift,r).map(f=>`${f.label} : ${r[f.id]||"-"}`),
     "",
     "การเช็ครถ",
     `Para/ENP/RN : ${checkMark(checks.para,"para")}`,
@@ -193,9 +197,9 @@ function daysUntilExp(expStr){
 }
 function ettExpColor(days){
   if(days===null) return null;
-  if(days<0)  return "#ef4444";  // หมดแล้ว
-  if(days<=30) return "#f59e0b"; // ใกล้หมด
-  return "#4ade80"; // OK
+  if(days<0)  return "#e25c86";  // หมดแล้ว
+  if(days<=30) return "#e8893a"; // ใกล้หมด
+  return "#128a6a"; // OK
 }
 function ettExpText(days){
   if(days===null) return null;
@@ -205,10 +209,10 @@ function ettExpText(days){
   return `เหลือ ${days} วัน ✓`;
 }
 
-const BASE_INP={background:"rgba(255,255,255,0.07)",border:"1.5px solid rgba(255,255,255,0.13)",borderRadius:9,padding:"10px 14px",color:"#f1f5f9",fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box",width:"100%"};
-const BASE_SEL={background:"rgba(255,255,255,0.1)",border:"1.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"8px 12px",color:"#f1f5f9",fontSize:14,fontFamily:"inherit",cursor:"pointer"};
-const iconBtn={background:"rgba(255,255,255,0.07)",border:"none",borderRadius:6,color:"#94a3b8",cursor:"pointer",padding:"3px 7px",fontSize:11,lineHeight:1};
-function Card({children,style={}}){return <div style={{background:"rgba(255,255,255,0.05)",borderRadius:14,padding:"18px 20px",marginBottom:14,...style}}>{children}</div>;}
+const BASE_INP={background:"#f1f6fc",border:"1.5px solid #d3e1f1",borderRadius:9,padding:"10px 14px",color:"#1f3047",fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box",width:"100%"};
+const BASE_SEL={background:"#e9f1fb",border:"1.5px solid #dbe7f5",borderRadius:8,padding:"8px 12px",color:"#1f3047",fontSize:14,fontFamily:"inherit",cursor:"pointer"};
+const iconBtn={background:"#f1f6fc",border:"none",borderRadius:6,color:"#5d7290",cursor:"pointer",padding:"3px 7px",fontSize:11,lineHeight:1};
+function Card({children,style={}}){return <div style={{background:"#ffffff",border:"1px solid #e3edf8",boxShadow:"0 2px 12px rgba(30,64,120,0.06)",borderRadius:16,padding:"18px 20px",marginBottom:14,...style}}>{children}</div>;}
 
 /* ── Excel Export ── */
 function exportToExcel(allData,equipment,selYear,selMonth){
@@ -251,20 +255,20 @@ function PinLockScreen({onUnlock}){
   function handleDelete(){setPin(p=>p.slice(0,-1));setError(false);}
   const digits=["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return(
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e293b)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",padding:24}}>
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f3f8ff,#ecf7f6)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",padding:24}}>
       <div style={{fontSize:44,marginBottom:12}}>🔒</div>
-      <div style={{fontSize:20,fontWeight:800,color:"#f1f5f9",marginBottom:6}}>Dashboard & จัดการข้อมูล</div>
-      <div style={{fontSize:14,color:"#64748b",marginBottom:40}}>ใส่ PIN เพื่อเข้าถึง</div>
+      <div style={{fontSize:20,fontWeight:800,color:"#1f3047",marginBottom:6}}>Dashboard & จัดการข้อมูล</div>
+      <div style={{fontSize:14,color:"#7f93ab",marginBottom:40}}>ใส่ PIN เพื่อเข้าถึง</div>
       <div style={{display:"flex",gap:16,marginBottom:36,animation:shake?"shake 0.4s ease":"none"}}>
         {Array.from({length:correctPin.length}).map((_,i)=>(
-          <div key={i} style={{width:18,height:18,borderRadius:"50%",background:i<pin.length?(error?"#ef4444":"#f1f5f9"):"rgba(255,255,255,0.15)",transition:"background 0.15s"}}/>
+          <div key={i} style={{width:18,height:18,borderRadius:"50%",background:i<pin.length?(error?"#e25c86":"#1f3047"):"#dbe7f5",transition:"background 0.15s"}}/>
         ))}
       </div>
-      {error&&<div style={{fontSize:13,color:"#ef4444",marginBottom:20,fontWeight:600}}>PIN ไม่ถูกต้อง</div>}
+      {error&&<div style={{fontSize:13,color:"#e25c86",marginBottom:20,fontWeight:600}}>PIN ไม่ถูกต้อง</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3, 72px)",gap:12}}>
         {digits.map((d,i)=>(
           <button key={i} onClick={()=>d==="⌫"?handleDelete():d?handleDigit(d):null} disabled={!d}
-            style={{width:72,height:72,borderRadius:16,border:"none",cursor:d?"pointer":"default",fontFamily:"inherit",fontSize:d==="⌫"?22:26,fontWeight:700,background:d?"rgba(255,255,255,0.08)":"transparent",color:d?"#f1f5f9":"transparent"}}>
+            style={{width:72,height:72,borderRadius:16,border:"none",cursor:d?"pointer":"default",fontFamily:"inherit",fontSize:d==="⌫"?22:26,fontWeight:700,background:d?"#e3edf8":"transparent",color:d?"#1f3047":"transparent"}}>
             {d}
           </button>
         ))}
@@ -277,16 +281,16 @@ function PinLockScreen({onUnlock}){
 /* ── Role Select ── */
 function RoleSelectScreen({onSelect}){
   return(
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e293b)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f3f8ff,#ecf7f6)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Sarabun','Noto Sans Thai',sans-serif"}}>
       <div style={{fontSize:52,marginBottom:16}}>🚑</div>
-      <div style={{fontSize:22,fontWeight:900,color:"#f1f5f9",marginBottom:6}}>EMS Equipment Check</div>
-      <div style={{fontSize:14,color:"#64748b",marginBottom:40}}>รพ.มหาราช · เลือกตำแหน่งของคุณ</div>
+      <div style={{fontSize:22,fontWeight:900,color:"#1f3047",marginBottom:6}}>EMS Equipment Check</div>
+      <div style={{fontSize:14,color:"#7f93ab",marginBottom:40}}>รพ.มหาราช · เลือกตำแหน่งของคุณ</div>
       {ROLES.map(r=>(
         <button key={r.id} onClick={()=>onSelect(r.id)} style={{width:"100%",maxWidth:360,marginBottom:14,padding:"20px 24px",borderRadius:16,border:`2px solid ${r.color}44`,cursor:"pointer",background:`linear-gradient(135deg,${r.color}22,${r.color}11)`,display:"flex",alignItems:"center",gap:16,fontFamily:"inherit"}}>
           <div style={{fontSize:32}}>{r.icon}</div>
           <div style={{textAlign:"left"}}>
-            <div style={{fontSize:17,fontWeight:800,color:"#f1f5f9"}}>{r.label}</div>
-            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>แตะเพื่อเข้าระบบ</div>
+            <div style={{fontSize:17,fontWeight:800,color:"#1f3047"}}>{r.label}</div>
+            <div style={{fontSize:12,color:"#7f93ab",marginTop:2}}>แตะเพื่อเข้าระบบ</div>
           </div>
           <div style={{marginLeft:"auto",color:r.color,fontSize:22}}>›</div>
         </button>
@@ -299,12 +303,12 @@ function RoleSelectScreen({onSelect}){
 /* ── รายชื่อเจ้าหน้าที่ (staff) ใช้เป็นตัวเลือกตอนพิมพ์ชื่อ ── */
 const STAFF_GROUPS=[
   {id:"ep",     label:"EP (แพทย์)"},
-  {id:"nurse",  label:"Para / ENP / RN (ไม้ 9, A, A1, A2)"},
+  {id:"nurse",  label:"Para / ENP / RN (ไม้ 9, A, A1, A2, Pre-hos)"},
   {id:"aemt",   label:"A-EMT"},
   {id:"driv",   label:"พขร."},
   {id:"vehicle",label:"ทะเบียนรถ"},
 ];
-const FIELD_GROUP={ep:"ep",p9:"nurse",a:"nurse",a1:"nurse",a2:"nurse",aemt:"aemt",driv:"driv",vehicle:"vehicle"};
+const FIELD_GROUP={ep:"ep",p9:"nurse",a:"nurse",a1:"nurse",a2:"nurse",ph1:"nurse",ph2:"nurse",aemt:"aemt",driv:"driv",vehicle:"vehicle"};
 function staffKey(name){return sanitizeKey(String(name).trim()).slice(0,200)||"_";}
 function addStaff(group,name){
   const n=String(name||"").trim();
@@ -349,7 +353,7 @@ function NameInput({value,onChange,options,placeholder,onAdd}){
   const matches=matchNames(options,value).filter(n=>n!==value);
   const typed=String(value||"").trim();
   const canAdd=!!onAdd&&typed.length>1&&!options.some(n=>normName(n)===normName(typed));
-  const ROW={display:"block",width:"100%",minHeight:44,padding:"10px 14px",textAlign:"left",border:"none",borderBottom:"1px solid #334155",background:"transparent",color:"#f1f5f9",fontFamily:"inherit",fontSize:15,cursor:"pointer"};
+  const ROW={display:"block",width:"100%",minHeight:44,padding:"10px 14px",textAlign:"left",border:"none",borderBottom:"1px solid #d6e4f5",background:"transparent",color:"#1f3047",fontFamily:"inherit",fontSize:15,cursor:"pointer"};
   return(
     <div style={{position:"relative"}}>
       <input value={value} onChange={e=>{onChange(e.target.value);setOpen(true);setAdded("");}}
@@ -358,18 +362,18 @@ function NameInput({value,onChange,options,placeholder,onAdd}){
         style={{...BASE_INP,width:"100%",boxSizing:"border-box",fontSize:16,paddingRight:40}}/>
       {value&&(
         <button type="button" aria-label="ล้างชื่อ" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange("");setOpen(true);}}
-          style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",width:36,height:36,border:"none",background:"transparent",color:"#64748b",fontSize:18,cursor:"pointer"}}>×</button>
+          style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",width:36,height:36,border:"none",background:"transparent",color:"#7f93ab",fontSize:18,cursor:"pointer"}}>×</button>
       )}
-      {added&&<div style={{fontSize:12,color:"#4ade80",marginTop:4}}>✓ เพิ่ม “{added}” เข้ารายชื่อแล้ว</div>}
+      {added&&<div style={{fontSize:12,color:"#128a6a",marginTop:4}}>✓ เพิ่ม “{added}” เข้ารายชื่อแล้ว</div>}
       {open&&(matches.length>0||canAdd)&&(
-        <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:20,background:"#1e293b",border:"1.5px solid #475569",borderRadius:10,boxShadow:"0 10px 30px rgba(0,0,0,0.5)",maxHeight:300,overflowY:"auto"}}>
+        <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:20,background:"#e6eef8",border:"1.5px solid #8aa0b8",borderRadius:10,boxShadow:"0 10px 30px rgba(0,0,0,0.5)",maxHeight:300,overflowY:"auto"}}>
           {matches.map(n=>(
             <button key={n} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange(n);setOpen(false);}} style={ROW}>{n}</button>
           ))}
           {canAdd&&(
             <button type="button" onMouseDown={e=>e.preventDefault()}
               onClick={()=>{onAdd(typed);onChange(typed);setAdded(typed);setOpen(false);}}
-              style={{...ROW,color:"#fbbf24",fontWeight:700,borderBottom:"none"}}>＋ เพิ่ม “{typed}” เข้ารายชื่อ</button>
+              style={{...ROW,color:"#c26a1e",fontWeight:700,borderBottom:"none"}}>＋ เพิ่ม “{typed}” เข้ารายชื่อ</button>
           )}
         </div>
       )}
@@ -386,23 +390,8 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
   const [saving,setSaving]=useState(false); const [saved,setSaved]=useState(false);
   const [err,setErr]=useState(""); const [copied,setCopied]=useState(false);
 
-  // ประวัติทั้งหมด (ใช้ทำรายชื่อแนะนำ + ทะเบียนรถล่าสุด)
+  // ประวัติรายชื่อเวร (ใช้เติมทะเบียนรถล่าสุดให้)
   useEffect(()=>{const u=onValue(ref(db,"roster"),s=>setAll(s.val()||{}));return()=>u();},[]);
-  // ชื่อจากประวัติการเช็คอุปกรณ์ ใช้เป็นรายชื่อแนะนำ
-  const [checkNames,setCheckNames]=useState({para:[],aemt:[],driv:[]});
-  useEffect(()=>{
-    const u=onValue(ref(db,"records"),s=>{
-      const out={para:new Set(),aemt:new Set(),driv:new Set()};
-      const visit=v=>{
-        if(!v||typeof v!=="object") return;
-        if(typeof v.name==="string"&&out[v.roleId]){if(v.name.trim()) out[v.roleId].add(v.name.trim());return;}
-        Object.values(v).forEach(visit); // พขร. บ่าย/ดึก ถูกเก็บซ้อนอีกชั้น
-      };
-      Object.values(s.val()||{}).forEach(visit);
-      setCheckNames({para:[...out.para],aemt:[...out.aemt],driv:[...out.driv]});
-    });
-    return()=>u();
-  },[]);
 
   // ข้อมูลเวรที่เลือก
   useEffect(()=>{
@@ -426,31 +415,17 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
     return()=>us.forEach(u=>u());
   },[key]);
 
-  // ยังไม่เคยลงเวรนี้ → เติมให้ก่อนจากชื่อคนที่เช็คแล้ว และทะเบียนรถล่าสุด
+  // ยังไม่เคยลงเวรนี้ → เติมทะเบียนรถล่าสุดให้
   const lastVehicle=Object.keys(all).sort().reverse().map(k=>all[k]?.vehicle).find(Boolean)||"";
   useEffect(()=>{
     if(exists) return;
-    setForm(f=>({...f,
-      aemt:f.aemt||checks.aemt?.name||"",
-      driv:f.driv||checks.driv?.name||"",
-      vehicle:f.vehicle||lastVehicle,
-    }));
-  },[exists,checks.aemt,checks.driv,lastVehicle]);
+    setForm(f=>({...f,vehicle:f.vehicle||lastVehicle}));
+  },[exists,lastVehicle]);
 
   const fields=rosterFieldsFor(selShift);
-  // ไม้ A / A1 / A2 / ไม้ 9 ใช้รายชื่อแนะนำชุดเดียวกัน
-  const NURSE=["p9","a","a1","a2"];
-  const pool=ids=>[...new Set(Object.values(all).flatMap(r=>ids.map(i=>r&&r[i])).filter(Boolean))].sort();
+  // รายชื่อให้เลือก = เฉพาะรายชื่อที่เพิ่มไว้ในแท็บตั้งค่าเท่านั้น
   const staff=useStaff();
-  const merge=(...lists)=>[...new Set(lists.flat().filter(Boolean))];
-  const nurseList=merge(staff.nurse||[],pool(NURSE),checkNames.para);
-  const suggestions={
-    ep:merge(staff.ep||[],pool(["ep"])),
-    p9:nurseList, a:nurseList, a1:nurseList, a2:nurseList,
-    aemt:merge(staff.aemt||[],pool(["aemt"]),checkNames.aemt),
-    driv:merge(staff.driv||[],pool(["driv"]),checkNames.driv),
-    vehicle:merge(staff.vehicle||[],pool(["vehicle"])),
-  };
+  const suggestions=Object.fromEntries(ROSTER_ALL.map(f=>[f.id,staff[FIELD_GROUP[f.id]]||[]]));
 
   function setField(id,v){setForm(p=>({...p,[id]:v}));setSaved(false);setCopied(false);}
 
@@ -461,10 +436,6 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
       fields.forEach(f=>data[f.id]=(form[f.id]||"").trim());
       data.savedAt=new Date().toISOString();
       await set(ref(db,`roster/${key}`),data);
-      // ชื่อที่กรอกจะถูกเก็บเข้ารายชื่อเจ้าหน้าที่ด้วย ครั้งหน้าพิมพ์ตัวแรกก็เจอ
-      const known=g=>(staff[g]||[]).map(normName);
-      await Promise.all(fields.filter(f=>data[f.id]&&!known(FIELD_GROUP[f.id]).includes(normName(data[f.id])))
-        .map(f=>addStaff(FIELD_GROUP[f.id],data[f.id]).catch(()=>{})));
       setSaved(true);
     }catch(e){setErr("บันทึกไม่สำเร็จ: "+(e.message||e));}
     setSaving(false);
@@ -473,40 +444,39 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
   const report=buildShiftReport(selYear,selMonth,selDay,selShift,form,checks);
 
   return(
-    <Card style={{border:"1.5px solid #f59e0b55"}}>
+    <Card style={{border:"1.5px solid #9fd3e6"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
-        <span style={{fontSize:24}}>👥</span>
+        <span style={{fontSize:24}}>🫶</span>
         <div style={{flex:1}}>
-          <div style={{fontWeight:800,fontSize:15,color:"#fbbf24"}}>ผู้ปฏิบัติงานเวรนี้</div>
-          <div style={{fontSize:12,color:exists?"#4ade80":"#f87171"}}>{exists?"✓ ลงชื่อแล้ว — แตะเพื่อดู/แก้ไข":"ยังไม่ได้ลงชื่อ กรุณากรอกทุกเวร"}</div>
+          <div style={{fontWeight:800,fontSize:15,color:"#1f7f9a"}}>ผู้ปฏิบัติงานเวรนี้</div>
+          <div style={{fontSize:12,color:exists?"#128a6a":"#d6456f"}}>{exists?"✓ ลงชื่อแล้ว — แตะเพื่อดู/แก้ไข":"ยังไม่ได้ลงชื่อ กรุณากรอกทุกเวร"}</div>
         </div>
-        <span style={{fontSize:12,color:"#64748b"}}>{open?"▲":"▼"}</span>
+        <span style={{fontSize:12,color:"#7f93ab"}}>{open?"▲":"▼"}</span>
       </div>
 
       {open&&(
         <div style={{marginTop:14}}>
-          {selShift==="ดึก"&&<div style={{fontSize:12,color:"#c4b5fd",marginBottom:10}}>🌙 เวรดึก (00:15–08:14) นับเป็นของวันก่อนหน้า · ใช้ไม้ A1 / ไม้ A2</div>}
+          {selShift==="ดึก"&&<div style={{fontSize:12,color:"#6d5bd0",marginBottom:10}}>🌙 เวรดึก (00:15–08:14) นับเป็นของวันก่อนหน้า · ใช้ไม้ A1 / ไม้ A2</div>}
           {fields.map(f=>(
             <div key={f.id} style={{marginBottom:10}}>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:4}}>{f.label}</div>
+              <div style={{fontSize:12,color:"#5d7290",marginBottom:4}}>{f.label}{f.optional&&<span style={{color:"#7f93ab"}}> · ถ้าเวรนี้ไม่มี เว้นว่างไว้</span>}</div>
               <NameInput value={form[f.id]||""} onChange={v=>setField(f.id,v)} options={suggestions[f.id]}
-                onAdd={n=>addStaff(FIELD_GROUP[f.id],n).catch(e=>setErr("เพิ่มชื่อไม่สำเร็จ: "+(e.message||e)))}
                 placeholder={f.id==="vehicle"?"เช่น กษ 1139 นครศรีธรรมราช":"พิมพ์ชื่อ แล้วเลือกจากรายการ"}/>
             </div>
           ))}
-          {err&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ {err}</div>}
-          <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:saved?"#16a34a":saving?"#475569":"#d97706",color:"#fff"}}>
-            {saving?"⏳ กำลังบันทึก...":saved?"✅ บันทึกรายชื่อแล้ว":"💾 บันทึกรายชื่อผู้ปฏิบัติงาน"}
+          {err&&<div style={{fontSize:12,color:"#d6456f",marginBottom:8}}>⚠️ {err}</div>}
+          <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:saved?"#22a37f":saving?"#8aa0b8":"#4a86e8",color:"#fff"}}>
+            {saving?"⏳ กำลังบันทึก...":saved?"✅ บันทึกรายชื่อแล้ว":"✨ บันทึกรายชื่อผู้ปฏิบัติงาน"}
           </button>
         </div>
       )}
 
       {(exists||saved)&&(
         <div style={{marginTop:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:8}}>📣 ข้อความรายงานเวร (สถานะเช็คอัปเดตอัตโนมัติ)</div>
-          <div style={{background:"#0f172a",borderRadius:8,padding:14,fontSize:13,lineHeight:1.8,color:"#e2e8f0",whiteSpace:"pre-wrap",marginBottom:10}}>{report}</div>
+          <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:8}}>💌 ข้อความรายงานเวร (สถานะเช็คอัปเดตอัตโนมัติ)</div>
+          <div style={{background:"#f1f7ff",borderRadius:8,padding:14,fontSize:13,lineHeight:1.8,color:"#2b3d55",whiteSpace:"pre-wrap",marginBottom:10}}>{report}</div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>copyToClipboard(report).then(()=>setCopied(true))} style={{flex:1,padding:"10px 0",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#3b82f6",color:"#fff"}}>
+            <button onClick={()=>copyToClipboard(report).then(()=>setCopied(true))} style={{flex:1,padding:"10px 0",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#6a8df5",color:"#fff"}}>
               {copied?"✓ คัดลอกแล้ว":"📋 คัดลอกข้อความ"}
             </button>
             <a href={lineShareUrl(report)} target="_blank" rel="noopener noreferrer" style={{flex:1,padding:"10px 0",borderRadius:8,textAlign:"center",textDecoration:"none",fontSize:13,fontWeight:700,background:"#06c755",color:"#fff"}}>
@@ -559,7 +529,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
   function getExpDays(id){ return daysUntilExp(expDates[id]||""); }
   function setExp(id,val){ setExpDates(p=>({...p,[id]:val})); setSaved(false); }
 
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
@@ -567,19 +537,19 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
       {/* date badge */}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
-        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
+        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#128a6a"}}>✓ Sync ☁️</span>}
       </div>
 
       {warn==="future"&&(
-        <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #ef444466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{background:"rgba(226,92,134,0.12)",border:"1.5px solid #e25c8666",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
           <span style={{fontSize:20}}>⚠️</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#94a3b8"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#d6456f"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#5d7290"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{background:"rgba(232,137,58,0.12)",border:"1.5px solid #c26a1e66",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
           <span style={{fontSize:20}}>📋</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#94a3b8"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#c26a1e"}}>เวรนี้มีข้อมูลอยู่แล้ว</div><div style={{fontSize:12,color:"#5d7290"}}>ถ้าบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div></div>
         </div>
       )}
 
@@ -587,7 +557,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
       <Card>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
           <span style={{fontSize:26}}>{role.icon}</span>
-          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#64748b"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
+          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
         <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
       </Card>
@@ -598,11 +568,11 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
       {/* overall progress */}
       <Card style={{paddingBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#94a3b8"}}>ความคืบหน้าทั้งหมด</span>
-          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#4ade80":"#f59e0b"}}>{doneItems}/{totalItems}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#5d7290"}}>ความคืบหน้าทั้งหมด</span>
+          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#128a6a":"#e8893a"}}>{doneItems}/{totalItems}</span>
         </div>
-        <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden"}}>
-          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#4ade80)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
+        <div style={{height:8,background:"#e6eef8",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#128a6a)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
         </div>
       </Card>
 
@@ -617,7 +587,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
               <div style={{flex:1}}>
                 <div style={{fontSize:14,fontWeight:800,color:group.color}}>{group.label}</div>
               </div>
-              <span style={{fontSize:12,color:groupDone===group.items.length?"#4ade80":"#f59e0b",fontWeight:700}}>{groupDone}/{group.items.length}</span>
+              <span style={{fontSize:12,color:groupDone===group.items.length?"#128a6a":"#e8893a",fontWeight:700}}>{groupDone}/{group.items.length}</span>
             </div>
 
             {/* items */}
@@ -625,10 +595,10 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
               const ck=!!checked[item.id];
               return(
                 <div key={item.id}>
-                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(74,222,128,0.08)":"transparent",transition:"background 0.15s"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
                     <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
-                    <span style={{fontSize:14,color:ck?"#4ade80":"#cbd5e1",flex:1}}>{item.label}</span>
-                    {ck&&<span style={{color:"#4ade80",fontSize:13}}>✓</span>}
+                    <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item.label}</span>
+                    {ck&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
                   </label>
 
                   {/* Expiry date field */}
@@ -636,8 +606,8 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
                     const expVal=expDates[item.id]||"";
                     const days=daysUntilExp(expVal);
                     return(
-                      <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)"}}>
-                        <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>📅 วันหมดอายุ (Exp. Date)</div>
+                      <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"#f6faff",borderRadius:8,border:"1px solid #e9f1fb"}}>
+                        <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>🗓️ วันหมดอายุ (Exp. Date)</div>
                         <input type="date" value={expVal} onChange={e=>setExp(item.id,e.target.value)}
                           style={{...BASE_INP,width:"auto",padding:"8px 12px",fontSize:13,colorScheme:"dark"}}/>
                         {expVal&&(
@@ -646,12 +616,12 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
                           </div>
                         )}
                         {days!==null&&days<=30&&days>=0&&(
-                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(245,158,11,0.15)",borderRadius:6,fontSize:12,color:"#fbbf24"}}>
+                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(232,137,58,0.15)",borderRadius:6,fontSize:12,color:"#c26a1e"}}>
                             ⚠️ กรุณาแจ้งหัวหน้าเพื่อเบิกของใหม่
                           </div>
                         )}
                         {days!==null&&days<0&&(
-                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(239,68,68,0.15)",borderRadius:6,fontSize:12,color:"#f87171"}}>
+                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(226,92,134,0.15)",borderRadius:6,fontSize:12,color:"#d6456f"}}>
                             🚨 หมดอายุแล้ว! ห้ามใช้ กรุณาเบิกทันที
                           </div>
                         )}
@@ -666,19 +636,19 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
       })}
 
       {/* mandatory note */}
-      <Card style={{border:noteError?"1.5px solid #ef4444":"undefined"}}>
-        <div style={{fontSize:13,fontWeight:700,color:noteError?"#f87171":"#94a3b8",marginBottom:6}}>
+      <Card style={{border:noteError?"1.5px solid #e25c86":"undefined"}}>
+        <div style={{fontSize:13,fontWeight:700,color:noteError?"#d6456f":"#5d7290",marginBottom:6}}>
           📝 เขียนปัญหาหรือข้อเสนอแนะทุกครั้ง หากไม่มีเขียน "ไม่มี" ได้เลย
-          <span style={{color:"#ef4444"}}> *</span>
+          <span style={{color:"#e25c86"}}> *</span>
         </div>
-        {noteError&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
+        {noteError&&<div style={{fontSize:12,color:"#d6456f",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
         <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);setNoteError(false);}}
           placeholder='เช่น "ไม่มี" หรือ "Defibrillator ใกล้หมดแบต"...'
-          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #ef4444":BASE_INP.border}}/>
+          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #e25c86":BASE_INP.border}}/>
       </Card>
 
-      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
-        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
+      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#22a37f":saving?"#8aa0b8":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
+        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"✨ บันทึกการเช็ค"}
       </button>
     </div>
   );
@@ -688,7 +658,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
 /* ── AEMT grouped items ── */
 const AEMT_GROUPS = [
   {
-    id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#3b82f6",
+    id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#6a8df5",
     items:[
       {id:"opa",        label:"Oropharyngeal airway (ผู้ใหญ่ 3 อัน, เด็ก 4 อัน)",    hasExp:false},
       {id:"nasal",      label:"Nasal cannula (ผู้ใหญ่, เด็ก 2 อัน)",                  hasExp:false},
@@ -701,7 +671,7 @@ const AEMT_GROUPS = [
     ]
   },
   {
-    id:"circulation", label:"2. Circulation", icon:"🩸", color:"#ef4444",
+    id:"circulation", label:"2. Circulation", icon:"🩸", color:"#e25c86",
     items:[
       {id:"tubelab",    label:"Tube Lab (5 tube+H/C ผู้ใหญ่, เด็ก)",                  hasExp:false},
       {id:"tourniquet", label:"Tourniquet ห้ามเลือด",                                  hasExp:false},
@@ -717,7 +687,7 @@ const AEMT_GROUPS = [
     ]
   },
   {
-    id:"equipment", label:"3. Equipment", icon:"🔧", color:"#f59e0b",
+    id:"equipment", label:"3. Equipment", icon:"🔧", color:"#e8893a",
     items:[
       {id:"delivery",   label:"Set คลอด",                                             hasExp:true},
       {id:"lucas",      label:"LUCAS (แบต)",                                           hasExp:false},
@@ -732,7 +702,7 @@ const AEMT_GROUPS = [
     ]
   },
   {
-    id:"ppe", label:"4. PPE", icon:"🦺", color:"#10b981",
+    id:"ppe", label:"4. PPE", icon:"🦺", color:"#2bb594",
     items:[
       {id:"glove_disp", label:"ถุงมือ Disposed (S, M)",                               hasExp:false},
       {id:"glove_ster", label:"ถุงมือ Sterile (6, 6.5, 7, 7.5)",                     hasExp:false},
@@ -748,7 +718,7 @@ const AEMT_GROUPS = [
 /* ── พนักงานขับรถ grouped items ── */
 const DRIV_GROUPS = [
   {
-    id:"equipment", label:"1. อุปกรณ์ในรถ", icon:"🚑", color:"#10b981",
+    id:"equipment", label:"1. อุปกรณ์ในรถ", icon:"🚑", color:"#2bb594",
     items:[
       {id:"infect_bin",   label:"ถังขยะติดเชื้อ",                hasExp:false, hasNote:false},
       {id:"needle_bin",   label:"ถังทิ้งเข็ม",                   hasExp:false, hasNote:false},
@@ -758,7 +728,7 @@ const DRIV_GROUPS = [
     ]
   },
   {
-    id:"transfer", label:"2. อุปกรณ์ยกเคลื่อนย้าย", icon:"🛗", color:"#3b82f6",
+    id:"transfer", label:"2. อุปกรณ์ยกเคลื่อนย้าย", icon:"🛗", color:"#6a8df5",
     items:[
       {id:"stairchair",   label:"เก้าอี้ Stair chair",            hasExp:false, hasNote:false},
       {id:"longboard",    label:"กระดาน Long spinal board",        hasExp:false, hasNote:false},
@@ -767,7 +737,7 @@ const DRIV_GROUPS = [
     ]
   },
   {
-    id:"car", label:"3. ความพร้อมของรถ", icon:"🚗", color:"#f59e0b",
+    id:"car", label:"3. ความพร้อมของรถ", icon:"🚗", color:"#e8893a",
     items:[
       {id:"engine_oil",   label:"น้ำมันเครื่อง",                  hasExp:false, hasNote:false},
       {id:"fuel",         label:"น้ำมันเชื้อเพลิง",               hasExp:false, hasNote:false},
@@ -823,28 +793,28 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
     if(drivDone===drivTotal&&note.trim()) setShowSuccess(true);
   }
 
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
       {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
-        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
+        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#128a6a"}}>✓ Sync ☁️</span>}
       </div>
       {warn==="future"&&(
-        <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #ef444466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{background:"rgba(226,92,134,0.12)",border:"1.5px solid #e25c8666",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
           <span style={{fontSize:20}}>⚠️</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#94a3b8"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#d6456f"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#5d7290"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+        <div style={{background:"rgba(232,137,58,0.12)",border:"1.5px solid #c26a1e66",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
           <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:myName?"8px":"0"}}>
             <span style={{fontSize:20}}>⚠️</span>
             <div>
-              <div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
-              <div style={{fontSize:12,color:"#94a3b8"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#c26a1e"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
+              <div style={{fontSize:12,color:"#5d7290"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
             </div>
           </div>
         </div>
@@ -852,17 +822,17 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
       <Card>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
           <span style={{fontSize:26}}>{role.icon}</span>
-          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#64748b"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
+          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
         <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
       </Card>
       <Card style={{paddingBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#94a3b8"}}>ความคืบหน้าทั้งหมด</span>
-          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#4ade80":"#f59e0b"}}>{doneItems}/{totalItems}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#5d7290"}}>ความคืบหน้าทั้งหมด</span>
+          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#128a6a":"#e8893a"}}>{doneItems}/{totalItems}</span>
         </div>
-        <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden"}}>
-          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#4ade80)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
+        <div style={{height:8,background:"#e6eef8",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#128a6a)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
         </div>
       </Card>
 
@@ -873,7 +843,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <span style={{fontSize:22}}>{group.icon}</span>
               <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:group.color}}>{group.label}</div></div>
-              <span style={{fontSize:12,color:groupDone===group.items.length?"#4ade80":"#f59e0b",fontWeight:700}}>{groupDone}/{group.items.length}</span>
+              <span style={{fontSize:12,color:groupDone===group.items.length?"#128a6a":"#e8893a",fontWeight:700}}>{groupDone}/{group.items.length}</span>
             </div>
             {group.items.map(item=>{
               const ck=!!checked[item.id];
@@ -882,25 +852,25 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
               const o2Low=o2Val&&o2Num<500;
               return(
                 <div key={item.id}>
-                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(74,222,128,0.08)":"transparent",transition:"background 0.15s"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
                     <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
-                    <span style={{fontSize:14,color:ck?"#4ade80":"#cbd5e1",flex:1}}>{item.label}</span>
-                    {ck&&!item.hasO2&&<span style={{color:"#4ade80",fontSize:13}}>✓</span>}
+                    <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item.label}</span>
+                    {ck&&!item.hasO2&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
                   </label>
 
                   {/* O2 level input */}
                   {item.hasO2&&ck&&(
-                    <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:`1px solid ${o2Low?"#ef444466":"rgba(255,255,255,0.1)"}`}}>
-                      <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>💨 ปริมาณ O₂ ที่เหลือ (PSI หรือ Bar)</div>
+                    <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"#f6faff",borderRadius:8,border:`1px solid ${o2Low?"#e25c8666":"#e9f1fb"}`}}>
+                      <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>💨 ปริมาณ O₂ ที่เหลือ (PSI หรือ Bar)</div>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         <input type="number" min="0" max="2000" value={o2Val}
                           onChange={e=>setO2(item.id,e.target.value)}
                           placeholder="เช่น 1500"
                           style={{...BASE_INP,width:140,padding:"8px 12px",fontSize:14}}/>
-                        <span style={{fontSize:13,color:"#64748b"}}>PSI</span>
+                        <span style={{fontSize:13,color:"#7f93ab"}}>PSI</span>
                       </div>
                       {o2Val&&(
-                        <div style={{marginTop:6,fontSize:12,fontWeight:700,color:o2Low?"#ef4444":"#4ade80"}}>
+                        <div style={{marginTop:6,fontSize:12,fontWeight:700,color:o2Low?"#e25c86":"#128a6a"}}>
                           {o2Low?"🚨 ออกซิเจนต่ำกว่า 500 PSI! กรุณาเติมก่อนออกปฏิบัติการ":"✓ ปริมาณออกซิเจนปกติ"}
                         </div>
                       )}
@@ -909,8 +879,8 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
 
                   {/* Scratch note */}
                   {item.hasNote&&ck&&(
-                    <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)"}}>
-                      <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>📝 ระบุตำแหน่งรอยเฉี่ยว (ถ้ามี)</div>
+                    <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"#f6faff",borderRadius:8,border:"1px solid #e9f1fb"}}>
+                      <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>📝 ระบุตำแหน่งรอยเฉี่ยว (ถ้ามี)</div>
                       <input value={scratchNote} onChange={e=>{setScratchNote(e.target.value);setSaved(false);}}
                         placeholder='เช่น "ไม่มี" หรือ "ประตูหน้าซ้ายมีรอยขีด"'
                         style={{...BASE_INP,padding:"8px 12px",fontSize:13}}/>
@@ -923,19 +893,19 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
         );
       })}
 
-      <Card style={{border:noteError?"1.5px solid #ef4444":"undefined"}}>
-        <div style={{fontSize:13,fontWeight:700,color:noteError?"#f87171":"#94a3b8",marginBottom:6}}>
+      <Card style={{border:noteError?"1.5px solid #e25c86":"undefined"}}>
+        <div style={{fontSize:13,fontWeight:700,color:noteError?"#d6456f":"#5d7290",marginBottom:6}}>
           📝 เขียนปัญหาหรือข้อเสนอแนะทุกครั้ง หากไม่มีเขียน "ไม่มี" ได้เลย
-          <span style={{color:"#ef4444"}}> *</span>
+          <span style={{color:"#e25c86"}}> *</span>
         </div>
-        {noteError&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
+        {noteError&&<div style={{fontSize:12,color:"#d6456f",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
         <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);setNoteError(false);}}
           placeholder='เช่น "ไม่มี" หรือ "น้ำมันเชื้อเพลิงเหลือน้อย"'
-          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #ef4444":BASE_INP.border}}/>
+          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #e25c86":BASE_INP.border}}/>
       </Card>
 
-      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
-        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
+      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#22a37f":saving?"#8aa0b8":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
+        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"✨ บันทึกการเช็ค"}
       </button>
     </div>
   );
@@ -978,28 +948,28 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
     if(doneItems===totalItems&&note.trim()) setShowSuccess(true);
   }
 
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
       {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
-        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
+        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#128a6a"}}>✓ Sync ☁️</span>}
       </div>
       {warn==="future"&&(
-        <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #ef444466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{background:"rgba(226,92,134,0.12)",border:"1.5px solid #e25c8666",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
           <span style={{fontSize:20}}>⚠️</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#94a3b8"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#d6456f"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#5d7290"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+        <div style={{background:"rgba(232,137,58,0.12)",border:"1.5px solid #c26a1e66",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
           <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:myName?"8px":"0"}}>
             <span style={{fontSize:20}}>⚠️</span>
             <div>
-              <div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
-              <div style={{fontSize:12,color:"#94a3b8"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#c26a1e"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
+              <div style={{fontSize:12,color:"#5d7290"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
             </div>
           </div>
         </div>
@@ -1007,17 +977,17 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
       <Card>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
           <span style={{fontSize:26}}>{role.icon}</span>
-          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#64748b"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
+          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
         <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
       </Card>
       <Card style={{paddingBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#94a3b8"}}>ความคืบหน้าทั้งหมด</span>
-          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#4ade80":"#f59e0b"}}>{doneItems}/{totalItems}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#5d7290"}}>ความคืบหน้าทั้งหมด</span>
+          <span style={{fontSize:13,color:doneItems===totalItems&&totalItems>0?"#128a6a":"#e8893a"}}>{doneItems}/{totalItems}</span>
         </div>
-        <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden"}}>
-          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#4ade80)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
+        <div style={{height:8,background:"#e6eef8",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#128a6a)`,width:`${totalItems?(doneItems/totalItems)*100:0}%`}}/>
         </div>
       </Card>
       {AEMT_GROUPS.map(group=>{
@@ -1027,33 +997,33 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <span style={{fontSize:22}}>{group.icon}</span>
               <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:group.color}}>{group.label}</div></div>
-              <span style={{fontSize:12,color:groupDone===group.items.length?"#4ade80":"#f59e0b",fontWeight:700}}>{groupDone}/{group.items.length}</span>
+              <span style={{fontSize:12,color:groupDone===group.items.length?"#128a6a":"#e8893a",fontWeight:700}}>{groupDone}/{group.items.length}</span>
             </div>
             {group.items.map(item=>{
               const ck=!!checked[item.id];
               return(
                 <div key={item.id}>
-                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(74,222,128,0.08)":"transparent",transition:"background 0.15s"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
                     <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
-                    <span style={{fontSize:14,color:ck?"#4ade80":"#cbd5e1",flex:1}}>{item.label}</span>
-                    {ck&&<span style={{color:"#4ade80",fontSize:13}}>✓</span>}
+                    <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item.label}</span>
+                    {ck&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
                   </label>
                   {item.hasExp&&ck&&(()=>{
                     const expVal=expDates[item.id]||"";
                     const days=daysUntilExp(expVal);
                     return(
-                      <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"rgba(255,255,255,0.04)",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)"}}>
-                        <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>📅 วันหมดอายุ (Exp. Date)</div>
+                      <div style={{marginLeft:42,marginBottom:10,padding:"10px 14px",background:"#f6faff",borderRadius:8,border:"1px solid #e9f1fb"}}>
+                        <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>🗓️ วันหมดอายุ (Exp. Date)</div>
                         <input type="date" value={expVal} onChange={e=>setExp(item.id,e.target.value)}
                           style={{...BASE_INP,width:"auto",padding:"8px 12px",fontSize:13,colorScheme:"dark"}}/>
                         {expVal&&<div style={{marginTop:6,fontSize:12,fontWeight:700,color:ettExpColor(days)}}>{ettExpText(days)}</div>}
                         {days!==null&&days<=30&&days>=0&&(
-                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(245,158,11,0.15)",borderRadius:6,fontSize:12,color:"#fbbf24"}}>
+                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(232,137,58,0.15)",borderRadius:6,fontSize:12,color:"#c26a1e"}}>
                             ⚠️ กรุณาแจ้งหัวหน้าเพื่อเบิกของใหม่
                           </div>
                         )}
                         {days!==null&&days<0&&(
-                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(239,68,68,0.15)",borderRadius:6,fontSize:12,color:"#f87171"}}>
+                          <div style={{marginTop:6,padding:"8px 12px",background:"rgba(226,92,134,0.15)",borderRadius:6,fontSize:12,color:"#d6456f"}}>
                             🚨 หมดอายุแล้ว! ห้ามใช้ กรุณาเบิกทันที
                           </div>
                         )}
@@ -1066,18 +1036,18 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
           </Card>
         );
       })}
-      <Card style={{border:noteError?"1.5px solid #ef4444":"undefined"}}>
-        <div style={{fontSize:13,fontWeight:700,color:noteError?"#f87171":"#94a3b8",marginBottom:6}}>
+      <Card style={{border:noteError?"1.5px solid #e25c86":"undefined"}}>
+        <div style={{fontSize:13,fontWeight:700,color:noteError?"#d6456f":"#5d7290",marginBottom:6}}>
           📝 เขียนปัญหาหรือข้อเสนอแนะทุกครั้ง หากไม่มีเขียน "ไม่มี" ได้เลย
-          <span style={{color:"#ef4444"}}> *</span>
+          <span style={{color:"#e25c86"}}> *</span>
         </div>
-        {noteError&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
+        {noteError&&<div style={{fontSize:12,color:"#d6456f",marginBottom:8}}>⚠️ กรุณากรอกข้อมูลก่อนบันทึกค่ะ</div>}
         <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);setNoteError(false);}}
           placeholder='เช่น "ไม่มี" หรือ "อุปกรณ์ชำรุด..."'
-          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #ef4444":BASE_INP.border}}/>
+          rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7,border:noteError?"1.5px solid #e25c86":BASE_INP.border}}/>
       </Card>
-      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
-        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
+      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#22a37f":saving?"#8aa0b8":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
+        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"✨ บันทึกการเช็ค"}
       </button>
     </div>
   );
@@ -1115,28 +1085,28 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
   }
 
   const done=items.filter(i=>checked[sanitizeKey(i)]).length; const total=items.length;
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
       {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
-        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓ Sync ☁️</span>}
+        {saved&&<span style={{marginLeft:"auto",fontSize:12,color:"#128a6a"}}>✓ Sync ☁️</span>}
       </div>
       {warn==="future"&&(
-        <div style={{background:"rgba(239,68,68,0.12)",border:"1.5px solid #ef444466",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{background:"rgba(226,92,134,0.12)",border:"1.5px solid #e25c8666",borderRadius:10,padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
           <span style={{fontSize:20}}>⚠️</span>
-          <div><div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#94a3b8"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
+          <div><div style={{fontSize:14,fontWeight:700,color:"#d6456f"}}>วันที่เป็นอนาคต!</div><div style={{fontSize:12,color:"#5d7290"}}>กรุณาตรวจสอบวันที่ก่อนบันทึกค่ะ</div></div>
         </div>
       )}
       {warn==="duplicate"&&!saved&&(
-        <div style={{background:"rgba(251,191,36,0.12)",border:"1.5px solid #fbbf2466",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+        <div style={{background:"rgba(232,137,58,0.12)",border:"1.5px solid #c26a1e66",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
           <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:myName?"8px":"0"}}>
             <span style={{fontSize:20}}>⚠️</span>
             <div>
-              <div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
-              <div style={{fontSize:12,color:"#94a3b8"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#c26a1e"}}>เวรนี้มีข้อมูลอยู่แล้ว!</div>
+              <div style={{fontSize:12,color:"#5d7290"}}>ถ้ากรอกชื่อและบันทึกใหม่จะทับข้อมูลเดิมค่ะ</div>
             </div>
           </div>
         </div>
@@ -1144,39 +1114,39 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
       <Card>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
           <span style={{fontSize:26}}>{role.icon}</span>
-          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#64748b"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
+          <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
         <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
       </Card>
       <Card style={{paddingBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#94a3b8"}}>ความคืบหน้า</span>
-          <span style={{fontSize:13,color:done===total&&total>0?"#4ade80":"#f59e0b"}}>{done}/{total}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#5d7290"}}>ความคืบหน้า</span>
+          <span style={{fontSize:13,color:done===total&&total>0?"#128a6a":"#e8893a"}}>{done}/{total}</span>
         </div>
-        <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden"}}>
-          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#4ade80)`,width:`${total?(done/total)*100:0}%`}}/>
+        <div style={{height:8,background:"#e6eef8",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:99,transition:"width 0.3s",background:`linear-gradient(90deg,${role.color},#128a6a)`,width:`${total?(done/total)*100:0}%`}}/>
         </div>
       </Card>
       <Card>
-        <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:12}}>🔧 รายการตรวจเช็ค</div>
-        {items.length===0?(<div style={{fontSize:13,color:"#475569",fontStyle:"italic"}}>ยังไม่มีรายการ · ไปตั้งค่าที่ ⚙️ ก่อนค่ะ</div>)
+        <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:12}}>🔧 รายการตรวจเช็ค</div>
+        {items.length===0?(<div style={{fontSize:13,color:"#8aa0b8",fontStyle:"italic"}}>ยังไม่มีรายการ · ไปตั้งค่าที่ ⚙️ ก่อนค่ะ</div>)
         :items.map(item=>{
           const ck=!!checked[sanitizeKey(item)];
           return(
-            <label key={item} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(74,222,128,0.08)":"transparent",transition:"background 0.15s"}}>
+            <label key={item} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
               <input type="checkbox" checked={ck} onChange={()=>toggle(item)} style={{width:18,height:18,accentColor:role.color,cursor:"pointer",flexShrink:0}}/>
-              <span style={{fontSize:14,color:ck?"#4ade80":"#cbd5e1",flex:1}}>{item}</span>
-              {ck&&<span style={{color:"#4ade80",fontSize:13}}>✓</span>}
+              <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item}</span>
+              {ck&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
             </label>
           );
         })}
       </Card>
       <Card>
-        <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:10}}>📝 หมายเหตุ</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:10}}>📝 หมายเหตุ</div>
         <textarea value={note} onChange={e=>{setNote(e.target.value);setSaved(false);}} placeholder="เช่น อุปกรณ์ชำรุด, ของขาด..." rows={3} style={{...BASE_INP,resize:"vertical",lineHeight:1.7}}/>
       </Card>
-      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
-        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"💾 บันทึกการเช็ค"}
+      <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"16px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:16,fontWeight:800,background:saved?"#22a37f":saving?"#8aa0b8":`linear-gradient(90deg,${role.color},${shiftMeta.accent})`,color:"#fff",boxShadow:`0 4px 20px ${role.color}44`,transition:"all 0.3s"}}>
+        {saving?"⏳ กำลัง Sync...":saved?"✅ บันทึก & Sync แล้ว!":"✨ บันทึกการเช็ค"}
       </button>
     </div>
   );
@@ -1235,26 +1205,26 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
       }).join("\n");
     }).join("\n")+"\n"+"─".repeat(36)+"\nรวม "+rows.length+" เวร";
 
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
   return(
     <div>
       <Card>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
             <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>{"📋 สรุปเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)}</div>
-            <div style={{fontSize:13,color:"#94a3b8"}}>เวรที่ยังเช็คไม่ครบ</div>
+            <div style={{fontSize:13,color:"#5d7290"}}>เวรที่ยังเช็คไม่ครบ</div>
           </div>
-          <button onClick={onLock} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"rgba(251,191,36,0.15)",color:"#fbbf24"}}>🔒 ล็อค</button>
+          <button onClick={onLock} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"rgba(232,137,58,0.15)",color:"#c26a1e"}}>🔒 ล็อค</button>
         </div>
       </Card>
       {rows.length===0?(
-        <div style={{background:"rgba(74,222,128,0.1)",border:"1.5px solid #4ade8055",borderRadius:14,padding:36,textAlign:"center"}}>
+        <div style={{background:"rgba(18,160,120,0.1)",border:"1.5px solid #128a6a55",borderRadius:14,padding:36,textAlign:"center"}}>
           <div style={{fontSize:44,marginBottom:10}}>✅</div>
-          <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>ครบทุกเวรแล้วค่ะ!</div>
+          <div style={{fontSize:16,fontWeight:700,color:"#128a6a"}}>ครบทุกเวรแล้วค่ะ!</div>
         </div>
       ):(
         <>
-          <div style={{background:"rgba(239,68,68,0.1)",border:"1.5px solid #ef444455",borderRadius:10,padding:"12px 16px",marginBottom:14,fontSize:14}}>
+          <div style={{background:"rgba(226,92,134,0.1)",border:"1.5px solid #e25c8655",borderRadius:10,padding:"12px 16px",marginBottom:14,fontSize:14}}>
             ⚠️ พบ <strong>{rows.length}</strong> เวร ที่ยังไม่สมบูรณ์
           </div>
           {rows.map(({day,shift,roleResults,ros},idx)=>{
@@ -1262,7 +1232,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
             const rowKey=`${day}_${shift}`;
             const isExp=expandedRow===rowKey;
             return(
-              <div key={idx} style={{marginBottom:8,background:"rgba(255,255,255,0.05)",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.08)"}}>
+              <div key={idx} style={{marginBottom:8,background:"#ffffff",borderRadius:12,overflow:"hidden",border:"1px solid #e3edf8"}}>
                 {/* clickable header */}
                 <div onClick={()=>setExpandedRow(isExp?null:rowKey)}
                   style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",cursor:"pointer",userSelect:"none"}}>
@@ -1274,7 +1244,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
                       const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
                       return <span key={r.role.id} style={{fontSize:16}}>{ok?"✅":"❌"}</span>;
                     })}
-                    <span style={{fontSize:12,color:"#64748b",marginLeft:4}}>{isExp?"▲":"▼"}</span>
+                    <span style={{fontSize:12,color:"#7f93ab",marginLeft:4}}>{isExp?"▲":"▼"}</span>
                   </div>
                 </div>
                 {/* expandable detail */}
@@ -1283,24 +1253,24 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
                     {roleResults.map(r=>{
                       const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
                       return(
-                        <div key={r.role.id} style={{display:"flex",flexDirection:"column",gap:4,padding:"10px 12px",borderRadius:8,background:ok?"rgba(74,222,128,0.06)":"rgba(239,68,68,0.06)",border:"1px solid "+(ok?"#4ade8033":"#ef444433")}}>
+                        <div key={r.role.id} style={{display:"flex",flexDirection:"column",gap:4,padding:"10px 12px",borderRadius:8,background:ok?"rgba(18,160,120,0.06)":"rgba(226,92,134,0.06)",border:"1px solid "+(ok?"#128a6a33":"#e25c8633")}}>
                           <div style={{display:"flex",alignItems:"center",gap:10}}>
                             <span style={{fontSize:18}}>{r.role.icon}</span>
                             <div style={{flex:1}}>
                               <div style={{fontSize:13,fontWeight:700,color:r.role.color}}>{r.role.short}</div>
-                              <div style={{fontSize:12,color:"#94a3b8"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
-                              {!r.entry?.name&&<div style={{fontSize:12,color:"#fbbf24",marginTop:2}}>👤 ผู้อยู่เวร: {dutyName(ros,r.role.id,shift)||"ไม่ได้ลงชื่อเวร"}</div>}
+                              <div style={{fontSize:12,color:"#5d7290"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
+                              {!r.entry?.name&&<div style={{fontSize:12,color:"#c26a1e",marginTop:2}}>👤 ผู้อยู่เวร: {dutyName(ros,r.role.id,shift)||"ไม่ได้ลงชื่อเวร"}</div>}
                             </div>
-                            <div style={{fontSize:12,color:ok?"#4ade80":"#f87171",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
+                            <div style={{fontSize:12,color:ok?"#128a6a":"#d6456f",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
                           </div>
                           {r.entry?.note&&(
-                            <div style={{fontSize:12,color:"#94a3b8",padding:"6px 10px",background:"rgba(255,255,255,0.04)",borderRadius:6}}>
+                            <div style={{fontSize:12,color:"#5d7290",padding:"6px 10px",background:"#f6faff",borderRadius:6}}>
                               📝 {r.entry.note}
                             </div>
                           )}
                           {r.entry?.savedAt&&(
-                            <div style={{fontSize:11,color:"#475569"}}>
-                              🕐 บันทึกเมื่อ {new Date(r.entry.savedAt).toLocaleString("th-TH",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"short"})}
+                            <div style={{fontSize:11,color:"#8aa0b8"}}>
+                              ⏰ บันทึกเมื่อ {new Date(r.entry.savedAt).toLocaleString("th-TH",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"short"})}
                             </div>
                           )}
                         </div>
@@ -1312,9 +1282,9 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
             );
           })}
           <Card>
-            <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:10}}>📋 คัดลอกส่งหัวหน้า</div>
-            <div style={{background:"#0f172a",borderRadius:8,padding:14,fontSize:12,lineHeight:1.9,color:"#e2e8f0",fontFamily:"monospace",whiteSpace:"pre-wrap",marginBottom:12}}>{copyText}</div>
-            <button onClick={()=>navigator.clipboard.writeText(copyText)} style={{padding:"10px 22px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#3b82f6",color:"#fff"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:10}}>📋 คัดลอกส่งหัวหน้า</div>
+            <div style={{background:"#f1f7ff",borderRadius:8,padding:14,fontSize:12,lineHeight:1.9,color:"#2b3d55",fontFamily:"monospace",whiteSpace:"pre-wrap",marginBottom:12}}>{copyText}</div>
+            <button onClick={()=>navigator.clipboard.writeText(copyText)} style={{padding:"10px 22px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#6a8df5",color:"#fff"}}>
               📋 คัดลอกข้อความ
             </button>
           </Card>
@@ -1343,6 +1313,9 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
   for(let d=getDays(selYear,selMonth);d>=1;d--){
     if(isFutureDate(selYear,selMonth,d)) continue;
     for(const shift of [...SHIFTS].reverse()){
+      // ข้ามเวรที่ยังไม่เริ่ม (เช้า 08:15, บ่าย 16:15, ดึก 00:15 ของวันถัดไป)
+      const start=new Date(selYear,selMonth,d+(shift==="ดึก"?1:0),shift==="เช้า"?8:shift==="บ่าย"?16:0,15);
+      if(start>getThaiNow()) continue;
       const key=rosterKey(selYear,selMonth,d,shift);
       const ros=roster[key];
       const checks={};
@@ -1356,11 +1329,11 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
   const okCount=rows.filter(r=>r.okAll).length;
 
   const short=(r,roleId)=>entryOK(r.checks[roleId],roleId)?"✅":r.checks[roleId]?"⚠️":"❌";
-  const monthText="👥 รายชื่อผู้ปฏิบัติงาน EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)+"\n"+"─".repeat(30)+"\n"+
+  const monthText="🫶 รายชื่อผู้ปฏิบัติงาน EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)+"\n"+"─".repeat(30)+"\n"+
     [...shown].reverse().map(r=>{
       const o=r.ros||{};
       return `• ${r.d} ${MONTH_NAMES[selMonth].slice(0,3)} เวร${r.shift}`+
-        (r.ros?"\n  "+rosterFieldsFor(r.shift).map(f=>`${f.label}: ${o[f.id]||"-"}`).join(" | "):"\n  (ไม่ได้ลงชื่อเวร)")+
+        (r.ros?"\n  "+shownFields(r.shift,o).map(f=>`${f.label}: ${o[f.id]||"-"}`).join(" | "):"\n  (ไม่ได้ลงชื่อเวร)")+
         `\n  เช็ค: Para/ENP/RN ${short(r,"para")} A-EMT ${short(r,"aemt")} พขร. ${short(r,"driv")}`;
     }).join("\n")+"\n"+"─".repeat(30)+`\nลงชื่อเวร ${rosterCount}/${rows.length} · เช็คครบ ${okCount}/${rows.length} เวร`;
 
@@ -1378,51 +1351,51 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
   }
 
   const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700};
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
   return(
     <div>
       <Card>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
           <div>
-            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>{"👥 รายชื่อเวร "+MONTH_NAMES[selMonth]+" "+(selYear+543)}</div>
-            <div style={{fontSize:13,color:"#94a3b8"}}>ลงชื่อเวร {rosterCount}/{rows.length} · เช็คครบ {okCount}/{rows.length} เวร</div>
+            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>{"🫶 รายชื่อเวร "+MONTH_NAMES[selMonth]+" "+(selYear+543)}</div>
+            <div style={{fontSize:13,color:"#5d7290"}}>ลงชื่อเวร {rosterCount}/{rows.length} · เช็คครบ {okCount}/{rows.length} เวร</div>
           </div>
-          <button onClick={onLock} style={{...BTN,background:"rgba(251,191,36,0.15)",color:"#fbbf24"}}>🔒 ล็อค</button>
+          <button onClick={onLock} style={{...BTN,background:"rgba(232,137,58,0.15)",color:"#c26a1e"}}>🔒 ล็อค</button>
         </div>
         <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
           {[["all","ทั้งหมด"],["missing","เช็คไม่ครบ"],["noroster","ไม่ได้ลงชื่อเวร"]].map(([id,l])=>(
-            <button key={id} onClick={()=>setFilter(id)} style={{...BTN,background:filter===id?"#f59e0b":"rgba(255,255,255,0.07)",color:filter===id?"#fff":"#94a3b8"}}>{l}</button>
+            <button key={id} onClick={()=>setFilter(id)} style={{...BTN,background:filter===id?"#2a9fb8":"#f1f6fc",color:filter===id?"#fff":"#5d7290"}}>{l}</button>
           ))}
         </div>
       </Card>
 
-      {shown.length===0&&<div style={{textAlign:"center",padding:30,color:"#64748b"}}>ไม่มีรายการ</div>}
+      {shown.length===0&&<div style={{textAlign:"center",padding:30,color:"#7f93ab"}}>ไม่มีรายการ</div>}
       {shown.map(r=>{
         const sm=SHIFT_META[r.shift]; const o=r.ros||{}; const isOpen=openKey===r.key;
         return(
-          <div key={r.key} style={{marginBottom:8,background:"rgba(255,255,255,0.05)",borderRadius:12,border:"1px solid "+(r.okAll?"rgba(255,255,255,0.08)":"#ef444444"),overflow:"hidden"}}>
+          <div key={r.key} style={{marginBottom:8,background:"#ffffff",borderRadius:12,border:"1px solid "+(r.okAll?"#e3edf8":"#e25c8644"),overflow:"hidden"}}>
             <div onClick={()=>setOpenKey(isOpen?null:r.key)} style={{padding:"12px 14px",cursor:"pointer",userSelect:"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{padding:"3px 10px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.accent+"22",color:sm.accent}}>{sm.icon} {r.d} {MONTH_NAMES[selMonth].slice(0,3)} · เวร{r.shift}</span>
-                <span style={{marginLeft:"auto",fontSize:12,color:"#94a3b8"}}>Para {short(r,"para")} · A-EMT {short(r,"aemt")} · พขร. {short(r,"driv")}</span>
+                <span style={{marginLeft:"auto",fontSize:12,color:"#5d7290"}}>Para {short(r,"para")} · A-EMT {short(r,"aemt")} · พขร. {short(r,"driv")}</span>
               </div>
               {r.ros?(
                 <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"2px 10px",fontSize:13,marginTop:8}}>
-                  {rosterFieldsFor(r.shift).map(f=>[
-                    <span key={f.id+"l"} style={{color:"#64748b"}}>{f.label}</span>,
-                    <span key={f.id+"v"} style={{color:"#e2e8f0"}}>{o[f.id]||"-"}</span>
+                  {shownFields(r.shift,o).map(f=>[
+                    <span key={f.id+"l"} style={{color:"#7f93ab"}}>{f.label}</span>,
+                    <span key={f.id+"v"} style={{color:"#2b3d55"}}>{o[f.id]||"-"}</span>
                   ])}
                 </div>
               ):(
-                <div style={{fontSize:13,color:"#f87171",marginTop:8}}>⚠️ ไม่ได้ลงชื่อผู้ปฏิบัติงานเวรนี้</div>
+                <div style={{fontSize:13,color:"#d6456f",marginTop:8}}>⚠️ ไม่ได้ลงชื่อผู้ปฏิบัติงานเวรนี้</div>
               )}
             </div>
             {isOpen&&(()=>{
               const rep=buildShiftReport(selYear,selMonth,r.d,r.shift,r.ros,r.checks);
               return(
                 <div style={{padding:"0 14px 14px"}}>
-                  <div style={{background:"#0f172a",borderRadius:8,padding:12,fontSize:12,lineHeight:1.8,color:"#e2e8f0",whiteSpace:"pre-wrap",marginBottom:8}}>{rep}</div>
-                  <button onClick={()=>copyToClipboard(rep).then(()=>setCopied(r.key))} style={{...BTN,background:"#3b82f6",color:"#fff"}}>{copied===r.key?"✓ คัดลอกแล้ว":"📋 คัดลอกรายงานเวรนี้"}</button>
+                  <div style={{background:"#f1f7ff",borderRadius:8,padding:12,fontSize:12,lineHeight:1.8,color:"#2b3d55",whiteSpace:"pre-wrap",marginBottom:8}}>{rep}</div>
+                  <button onClick={()=>copyToClipboard(rep).then(()=>setCopied(r.key))} style={{...BTN,background:"#6a8df5",color:"#fff"}}>{copied===r.key?"✓ คัดลอกแล้ว":"📋 คัดลอกรายงานเวรนี้"}</button>
                 </div>
               );
             })()}
@@ -1431,10 +1404,10 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
       })}
 
       <Card>
-        <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:10}}>📤 สรุปทั้งเดือน (ตามตัวกรองที่เลือก)</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:10}}>📤 สรุปทั้งเดือน (ตามตัวกรองที่เลือก)</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button onClick={()=>copyToClipboard(monthText).then(()=>setCopied("month"))} style={{...BTN,background:"#3b82f6",color:"#fff"}}>{copied==="month"?"✓ คัดลอกแล้ว":"📋 คัดลอกข้อความสรุป"}</button>
-          <button onClick={exportCsv} style={{...BTN,background:"#16a34a",color:"#fff"}}>📊 ดาวน์โหลด Excel (CSV)</button>
+          <button onClick={()=>copyToClipboard(monthText).then(()=>setCopied("month"))} style={{...BTN,background:"#6a8df5",color:"#fff"}}>{copied==="month"?"✓ คัดลอกแล้ว":"📋 คัดลอกข้อความสรุป"}</button>
+          <button onClick={exportCsv} style={{...BTN,background:"#22a37f",color:"#fff"}}>📊 ดาวน์โหลด Excel (CSV)</button>
         </div>
       </Card>
     </div>
@@ -1501,7 +1474,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
   });
 
   const overallPct=Math.round((totalDone/totalSlots)*100);
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
 
   return(
     <div>
@@ -1509,34 +1482,34 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
           <div>
             <div style={{fontSize:16,fontWeight:800,marginBottom:2}}>📊 Dashboard</div>
-            <div style={{fontSize:13,color:"#94a3b8"}}>เดือน{MONTH_NAMES[selMonth]} {selYear+543}</div>
+            <div style={{fontSize:13,color:"#5d7290"}}>เดือน{MONTH_NAMES[selMonth]} {selYear+543}</div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button onClick={()=>exportToExcel(allData,equipment,selYear,selMonth)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#16a34a",color:"#fff"}}>📥 Excel</button>
-            <button onClick={()=>setDelMode(d=>!d)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:delMode?"#ef4444":"rgba(239,68,68,0.2)",color:delMode?"#fff":"#f87171"}}>🗑️ ลบข้อมูล</button>
-            <button onClick={onLock} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"rgba(251,191,36,0.15)",color:"#fbbf24"}}>🔒 ล็อค</button>
+            <button onClick={()=>exportToExcel(allData,equipment,selYear,selMonth)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#22a37f",color:"#fff"}}>📥 Excel</button>
+            <button onClick={()=>setDelMode(d=>!d)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:delMode?"#e25c86":"rgba(226,92,134,0.2)",color:delMode?"#fff":"#d6456f"}}>🗑️ ลบข้อมูล</button>
+            <button onClick={onLock} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"rgba(232,137,58,0.15)",color:"#c26a1e"}}>🔒 ล็อค</button>
           </div>
         </div>
       </Card>
 
       {delMode&&(
-        <Card style={{border:"1.5px solid rgba(239,68,68,0.4)"}}>
-          <div style={{fontSize:14,fontWeight:800,color:"#f87171",marginBottom:14}}>🗑️ ลบข้อมูลที่ระบุ</div>
+        <Card style={{border:"1.5px solid rgba(226,92,134,0.4)"}}>
+          <div style={{fontSize:14,fontWeight:800,color:"#d6456f",marginBottom:14}}>🗑️ ลบข้อมูลที่ระบุ</div>
           <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
             <div style={{flex:1,minWidth:80}}>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>วันที่</div>
+              <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>วันที่</div>
               <select value={delDay} onChange={e=>setDelDay(+e.target.value)} style={BASE_SEL}>
                 {Array.from({length:days},(_,i)=>i+1).map(d=><option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             <div style={{flex:1,minWidth:80}}>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>เวร</div>
+              <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>เวร</div>
               <select value={delShift} onChange={e=>setDelShift(e.target.value)} style={BASE_SEL}>
                 {SHIFTS.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div style={{flex:1,minWidth:100}}>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>ตำแหน่ง</div>
+              <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>ตำแหน่ง</div>
               <select value={delRole} onChange={e=>setDelRole(e.target.value)} style={BASE_SEL}>
                 {ROLES.map(r=><option key={r.id} value={r.id}>{r.short}</option>)}
               </select>
@@ -1544,26 +1517,26 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
           </div>
           {(()=>{const k=recKey(selYear,selMonth,delDay,delShift,delRole);const e=allData[k];
             return e?(
-              <div style={{background:"rgba(239,68,68,0.08)",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13}}>
-                <div style={{color:"#f87171",fontWeight:700,marginBottom:4}}>ข้อมูลที่จะถูกลบ:</div>
-                <div style={{color:"#94a3b8"}}>👤 {e.name||"ไม่มีชื่อ"} · {e.savedAt?.slice(0,10)||"-"}</div>
+              <div style={{background:"rgba(226,92,134,0.08)",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13}}>
+                <div style={{color:"#d6456f",fontWeight:700,marginBottom:4}}>ข้อมูลที่จะถูกลบ:</div>
+                <div style={{color:"#5d7290"}}>👤 {e.name||"ไม่มีชื่อ"} · {e.savedAt?.slice(0,10)||"-"}</div>
               </div>
             ):(
-              <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#475569"}}>ไม่มีข้อมูลในเวรนี้</div>
+              <div style={{background:"#f6faff",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#8aa0b8"}}>ไม่มีข้อมูลในเวรนี้</div>
             );
           })()}
-          <button onClick={handleDelete} disabled={deleting||!allData[recKey(selYear,selMonth,delDay,delShift,delRole)]} style={{width:"100%",padding:"11px 0",borderRadius:9,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,background:delDone?"#16a34a":deleting?"#475569":"#ef4444",color:"#fff",transition:"all 0.3s"}}>
+          <button onClick={handleDelete} disabled={deleting||!allData[recKey(selYear,selMonth,delDay,delShift,delRole)]} style={{width:"100%",padding:"11px 0",borderRadius:9,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,background:delDone?"#22a37f":deleting?"#8aa0b8":"#e25c86",color:"#fff",transition:"all 0.3s"}}>
             {delDone?"✅ ลบเรียบร้อย!":deleting?"⏳ กำลังลบ...":"🗑️ ยืนยันลบข้อมูล"}
           </button>
         </Card>
       )}
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
-        {[{label:"ครบทุกรายการ",value:totalDone,color:"#4ade80",icon:"✅"},{label:"ไม่สมบูรณ์",value:totalIncomplete,color:"#f59e0b",icon:"⚠️"},{label:"ไม่มีข้อมูล",value:totalMissing,color:"#f87171",icon:"❌"}].map(s=>(
-          <div key={s.label} style={{background:"rgba(255,255,255,0.05)",borderRadius:12,padding:"14px 12px",textAlign:"center"}}>
+        {[{label:"ครบทุกรายการ",value:totalDone,color:"#128a6a",icon:"✅"},{label:"ไม่สมบูรณ์",value:totalIncomplete,color:"#e8893a",icon:"⚠️"},{label:"ไม่มีข้อมูล",value:totalMissing,color:"#d6456f",icon:"❌"}].map(s=>(
+          <div key={s.label} style={{background:"#ffffff",borderRadius:12,padding:"14px 12px",textAlign:"center"}}>
             <div style={{fontSize:22}}>{s.icon}</div>
             <div style={{fontSize:24,fontWeight:900,color:s.color,marginTop:4}}>{s.value}</div>
-            <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{s.label}</div>
+            <div style={{fontSize:11,color:"#7f93ab",marginTop:2}}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -1572,20 +1545,20 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
         <div style={{display:"flex",alignItems:"center",gap:20}}>
           <div style={{position:"relative",width:80,height:80,flexShrink:0}}>
             <svg viewBox="0 0 36 36" style={{width:80,height:80,transform:"rotate(-90deg)"}}>
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"/>
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke={overallPct>=80?"#4ade80":overallPct>=50?"#f59e0b":"#f87171"} strokeWidth="3" strokeDasharray={`${overallPct} ${100-overallPct}`} strokeLinecap="round"/>
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e9f1fb" strokeWidth="3"/>
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke={overallPct>=80?"#128a6a":overallPct>=50?"#e8893a":"#d6456f"} strokeWidth="3" strokeDasharray={`${overallPct} ${100-overallPct}`} strokeLinecap="round"/>
             </svg>
-            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:16,fontWeight:900,color:"#f1f5f9"}}>{overallPct}%</div>
+            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:16,fontWeight:900,color:"#1f3047"}}>{overallPct}%</div>
           </div>
           <div>
             <div style={{fontSize:15,fontWeight:800}}>ภาพรวมการเช็ค</div>
-            <div style={{fontSize:13,color:"#94a3b8",marginTop:4}}>เช็คแล้ว {totalDone} จาก {totalSlots} เวร</div>
+            <div style={{fontSize:13,color:"#5d7290",marginTop:4}}>เช็คแล้ว {totalDone} จาก {totalSlots} เวร</div>
           </div>
         </div>
       </Card>
 
       <Card>
-        <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:14}}>แยกตามตำแหน่ง</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:14}}>แยกตามตำแหน่ง</div>
         {roleStats.map(({role,done,missing,incomplete,total})=>{
           const pct=Math.round((done/total)*100);
           return(
@@ -1593,12 +1566,12 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                 <span style={{fontSize:18}}>{role.icon}</span>
                 <span style={{fontSize:14,fontWeight:700,color:role.color}}>{role.short}</span>
-                <span style={{marginLeft:"auto",fontSize:13,fontWeight:800,color:pct>=80?"#4ade80":pct>=50?"#f59e0b":"#f87171"}}>{pct}%</span>
+                <span style={{marginLeft:"auto",fontSize:13,fontWeight:800,color:pct>=80?"#128a6a":pct>=50?"#e8893a":"#d6456f"}}>{pct}%</span>
               </div>
-              <div style={{height:8,background:"#1e293b",borderRadius:99,overflow:"hidden",marginBottom:4}}>
-                <div style={{height:"100%",borderRadius:99,background:pct>=80?"#4ade80":pct>=50?"#f59e0b":"#f87171",width:`${pct}%`,transition:"width 0.5s"}}/>
+              <div style={{height:8,background:"#e6eef8",borderRadius:99,overflow:"hidden",marginBottom:4}}>
+                <div style={{height:"100%",borderRadius:99,background:pct>=80?"#128a6a":pct>=50?"#e8893a":"#d6456f",width:`${pct}%`,transition:"width 0.5s"}}/>
               </div>
-              <div style={{display:"flex",gap:12,fontSize:11,color:"#64748b"}}>
+              <div style={{display:"flex",gap:12,fontSize:11,color:"#7f93ab"}}>
                 <span>✅ {done}</span><span>⚠️ {incomplete}</span><span>❌ {missing}</span>
               </div>
             </div>
@@ -1607,13 +1580,13 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
       </Card>
 
       <Card>
-        <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:14}}>7 วันล่าสุด</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#5d7290",marginBottom:14}}>7 วันล่าสุด</div>
         <div style={{display:"flex",alignItems:"flex-end",gap:8,height:80}}>
           {last7.map(({day,pct})=>(
             <div key={day} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <div style={{fontSize:10,color:pct===100?"#4ade80":pct>=50?"#f59e0b":"#f87171",fontWeight:700}}>{pct}%</div>
-              <div style={{width:"100%",background:pct===100?"#4ade80":pct>=50?"#f59e0b":"#f87171",borderRadius:"4px 4px 0 0",height:`${Math.max(4,pct*0.6)}px`,transition:"height 0.5s"}}/>
-              <div style={{fontSize:10,color:"#64748b"}}>{day}</div>
+              <div style={{fontSize:10,color:pct===100?"#128a6a":pct>=50?"#e8893a":"#d6456f",fontWeight:700}}>{pct}%</div>
+              <div style={{width:"100%",background:pct===100?"#128a6a":pct>=50?"#e8893a":"#d6456f",borderRadius:"4px 4px 0 0",height:`${Math.max(4,pct*0.6)}px`,transition:"height 0.5s"}}/>
+              <div style={{fontSize:10,color:"#7f93ab"}}>{day}</div>
             </div>
           ))}
         </div>
@@ -1647,30 +1620,30 @@ function StaffManager(){
   }
 
   return(
-    <Card style={{border:"1.5px solid rgba(245,158,11,0.35)"}}>
-      <div style={{fontSize:14,fontWeight:800,color:"#fbbf24",marginBottom:4}}>👥 รายชื่อเจ้าหน้าที่</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>ชื่อในนี้จะเด้งขึ้นให้เลือก เมื่อพิมพ์ในหน้าลงเวร</div>
+    <Card style={{border:"1.5px solid #9fd3e6"}}>
+      <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a",marginBottom:4}}>🫶 รายชื่อเจ้าหน้าที่</div>
+      <div style={{fontSize:12,color:"#5d7290",marginBottom:12}}>ชื่อในนี้จะเด้งขึ้นให้เลือก เมื่อพิมพ์ในหน้าลงเวร</div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
         {STAFF_GROUPS.map(g=>(
-          <button key={g.id} type="button" onClick={()=>{setGroup(g.id);setMsg("");}} style={{...BTN,background:group===g.id?"#d97706":"rgba(255,255,255,0.07)",color:group===g.id?"#fff":"#94a3b8"}}>
+          <button key={g.id} type="button" onClick={()=>{setGroup(g.id);setMsg("");}} style={{...BTN,background:group===g.id?"#4a86e8":"#f1f6fc",color:group===g.id?"#fff":"#5d7290"}}>
             {g.label} ({(staff[g.id]||[]).length})
           </button>
         ))}
       </div>
-      <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>เพิ่มชื่อ (วางได้หลายชื่อ บรรทัดละ 1 ชื่อ)</div>
+      <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>เพิ่มชื่อ (วางได้หลายชื่อ บรรทัดละ 1 ชื่อ)</div>
       <textarea value={text} onChange={e=>{setText(e.target.value);setMsg("");}} rows={4}
         placeholder={group==="vehicle"?"กษ 1139 นครศรีธรรมราช":"นส.กานดา ศรีสุข\nนายสมชาย ขับดี"}
         style={{...BASE_INP,width:"100%",boxSizing:"border-box",resize:"vertical",lineHeight:1.7,fontSize:16}}/>
-      <button type="button" onClick={addMany} disabled={busy} style={{...BTN,width:"100%",padding:"12px 0",marginTop:8,background:busy?"#475569":"#d97706",color:"#fff",fontSize:14}}>
+      <button type="button" onClick={addMany} disabled={busy} style={{...BTN,width:"100%",padding:"12px 0",marginTop:8,background:busy?"#8aa0b8":"#4a86e8",color:"#fff",fontSize:14}}>
         {busy?"⏳ กำลังเพิ่ม...":"＋ เพิ่มเข้ารายชื่อ"}
       </button>
-      {msg&&<div style={{fontSize:13,marginTop:8,color:msg.startsWith("⚠️")?"#f87171":"#4ade80"}}>{msg}</div>}
+      {msg&&<div style={{fontSize:13,marginTop:8,color:msg.startsWith("⚠️")?"#d6456f":"#128a6a"}}>{msg}</div>}
       <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:6}}>
-        {list.length===0&&<div style={{fontSize:13,color:"#64748b"}}>ยังไม่มีรายชื่อในกลุ่มนี้</div>}
+        {list.length===0&&<div style={{fontSize:13,color:"#7f93ab"}}>ยังไม่มีรายชื่อในกลุ่มนี้</div>}
         {list.map(n=>(
-          <div key={n} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 6px 6px 12px",background:"rgba(255,255,255,0.04)",borderRadius:8}}>
+          <div key={n} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 6px 6px 12px",background:"#f6faff",borderRadius:8}}>
             <span style={{flex:1,fontSize:14}}>{n}</span>
-            <button type="button" aria-label={`ลบ ${n}`} onClick={()=>del(n)} style={{...BTN,width:40,height:36,padding:0,background:"rgba(239,68,68,0.15)",color:"#f87171"}}>✕</button>
+            <button type="button" aria-label={`ลบ ${n}`} onClick={()=>del(n)} style={{...BTN,width:40,height:36,padding:0,background:"rgba(226,92,134,0.15)",color:"#d6456f"}}>✕</button>
           </div>
         ))}
       </div>
@@ -1716,11 +1689,11 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
           <span style={{fontSize:28}}>{role.icon}</span>
           <div>
             <div style={{fontSize:16,fontWeight:800}}>ตั้งค่ารายการอุปกรณ์</div>
-            <div style={{fontSize:13,color:"#94a3b8"}}>สำหรับ {role.label}</div>
+            <div style={{fontSize:13,color:"#5d7290"}}>สำหรับ {role.label}</div>
           </div>
         </div>
         {(myRole==="para"||myRole==="aemt"||myRole==="driv")&&(
-          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(16,185,129,0.1)",borderRadius:8,fontSize:13,color:"#6ee7b7"}}>
+          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(43,181,148,0.1)",borderRadius:8,fontSize:13,color:"#1a8a6b"}}>
             ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"พนักงานขับรถ"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
           </div>
         )}
@@ -1736,15 +1709,15 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
                   <button onClick={()=>move(i,1)} style={iconBtn}>▼</button>
                 </div>
                 <input value={item} onChange={e=>update(i,e.target.value)} placeholder={`รายการที่ ${i+1}`} style={BASE_INP}/>
-                <button onClick={()=>removeItem(i)} style={{...iconBtn,background:"rgba(239,68,68,0.15)",color:"#f87171",padding:"6px 10px",fontSize:14}}>✕</button>
+                <button onClick={()=>removeItem(i)} style={{...iconBtn,background:"rgba(226,92,134,0.15)",color:"#d6456f",padding:"6px 10px",fontSize:14}}>✕</button>
               </div>
             ))}
             <button onClick={add} style={{marginTop:6,padding:"9px 18px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:role.color+"22",color:role.color}}>+ เพิ่มรายการ</button>
           </Card>
           <div style={{display:"flex",gap:10,marginBottom:24}}>
-            <button onClick={()=>{if(window.confirm("รีเซ็ตรายการกลับค่าเริ่มต้น?"))setDraft([...DEFAULT_EQUIPMENT[myRole]]);}} style={{flex:1,padding:"13px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,background:"rgba(255,255,255,0.07)",color:"#94a3b8"}}>🔄 รีเซ็ต</button>
-            <button onClick={handleSaveEquip} disabled={saving} style={{flex:3,padding:"13px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:saved?"#16a34a":saving?"#475569":`linear-gradient(90deg,${role.color},${role.color}cc)`,color:"#fff",transition:"all 0.3s"}}>
-              {saving?"⏳ กำลังบันทึก...":saved?"✅ บันทึกแล้ว!":"💾 บันทึกการตั้งค่า"}
+            <button onClick={()=>{if(window.confirm("รีเซ็ตรายการกลับค่าเริ่มต้น?"))setDraft([...DEFAULT_EQUIPMENT[myRole]]);}} style={{flex:1,padding:"13px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,background:"#f1f6fc",color:"#5d7290"}}>🔄 รีเซ็ต</button>
+            <button onClick={handleSaveEquip} disabled={saving} style={{flex:3,padding:"13px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:saved?"#22a37f":saving?"#8aa0b8":`linear-gradient(90deg,${role.color},${role.color}cc)`,color:"#fff",transition:"all 0.3s"}}>
+              {saving?"⏳ กำลังบันทึก...":saved?"✅ บันทึกแล้ว!":"✨ บันทึกการตั้งค่า"}
             </button>
           </div>
         </>
@@ -1752,21 +1725,21 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
 
       <StaffManager/>
 
-      <Card style={{border:"1.5px solid rgba(251,191,36,0.3)"}}>
-        <div style={{fontSize:14,fontWeight:800,color:"#fbbf24",marginBottom:14}}>🔑 เปลี่ยน PIN</div>
+      <Card style={{border:"1.5px solid rgba(232,137,58,0.3)"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#c26a1e",marginBottom:14}}>🔑 เปลี่ยน PIN</div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>PIN ปัจจุบัน</div>
+          <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>PIN ปัจจุบัน</div>
           <input type="password" inputMode="numeric" value={currentPin} onChange={e=>{setCurrentPin(e.target.value);setPinError("");}} placeholder="PIN ปัจจุบัน" maxLength={6} style={{...BASE_INP,letterSpacing:6,fontSize:20}}/>
         </div>
         <div style={{marginBottom:14}}>
-          <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>PIN ใหม่ (4-6 หลัก)</div>
+          <div style={{fontSize:12,color:"#5d7290",marginBottom:6}}>PIN ใหม่ (4-6 หลัก)</div>
           <input type="password" inputMode="numeric" value={newPin} onChange={e=>{setNewPin(e.target.value.replace(/\D/g,""));setPinError("");}} placeholder="PIN ใหม่" maxLength={6} style={{...BASE_INP,letterSpacing:6,fontSize:20}}/>
         </div>
-        {pinError&&<div style={{fontSize:13,color:"#f87171",marginBottom:10}}>⚠️ {pinError}</div>}
-        <button onClick={handleChangePin} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,background:pinSaved?"#16a34a":"linear-gradient(90deg,#d97706,#b45309)",color:"#fff"}}>
+        {pinError&&<div style={{fontSize:13,color:"#d6456f",marginBottom:10}}>⚠️ {pinError}</div>}
+        <button onClick={handleChangePin} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,background:pinSaved?"#22a37f":"linear-gradient(90deg,#4a86e8,#3a6fd0)",color:"#fff"}}>
           {pinSaved?"✅ เปลี่ยน PIN เรียบร้อย!":"🔑 เปลี่ยน PIN"}
         </button>
-        <div style={{fontSize:12,color:"#475569",marginTop:10,textAlign:"center"}}>PIN เริ่มต้น: 1234</div>
+        <div style={{fontSize:12,color:"#8aa0b8",marginTop:10,textAlign:"center"}}>PIN เริ่มต้น: 1234</div>
       </Card>
     </div>
   );
@@ -1778,58 +1751,58 @@ function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,
   const timeStr=savedAt?new Date(savedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}):"";
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16,overflowY:"auto"}}>
-      <div style={{background:"linear-gradient(135deg,#0f172a,#1e293b)",borderRadius:20,padding:28,maxWidth:400,width:"100%",border:"2px solid #4ade8055",boxShadow:"0 0 60px rgba(74,222,128,0.25)"}}>
+      <div style={{background:"linear-gradient(160deg,#f3f8ff,#ecf7f6)",borderRadius:20,padding:28,maxWidth:400,width:"100%",border:"2px solid #128a6a55",boxShadow:"0 0 60px rgba(18,160,120,0.25)"}}>
         
         {/* Header - screenshot area */}
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:56,marginBottom:10,animation:"bounce 0.6s ease"}}>✅</div>
-          <div style={{fontSize:20,fontWeight:900,color:"#4ade80",marginBottom:4}}>เช็คเสร็จสมบูรณ์!</div>
-          <div style={{fontSize:12,color:"#64748b"}}>ขอบคุณสำหรับความร่วมมือ ขอให้เป็นวันที่ดี 🍀</div>
+          <div style={{fontSize:20,fontWeight:900,color:"#128a6a",marginBottom:4}}>เช็คเสร็จสมบูรณ์!</div>
+          <div style={{fontSize:12,color:"#7f93ab"}}>ขอบคุณสำหรับความร่วมมือ ขอให้เป็นวันที่ดี 🍀</div>
         </div>
 
         {/* Report card - screenshot friendly */}
-        <div style={{background:"#0f172a",border:"1.5px solid #4ade8044",borderRadius:14,padding:18,marginBottom:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,paddingBottom:12,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+        <div style={{background:"#f1f7ff",border:"1.5px solid #128a6a44",borderRadius:14,padding:18,marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,paddingBottom:12,borderBottom:"1px solid #e3edf8"}}>
             <div style={{fontSize:28}}>🚑</div>
             <div>
-              <div style={{fontSize:13,fontWeight:800,color:"#f1f5f9"}}>EMS Equipment Check</div>
-              <div style={{fontSize:11,color:"#64748b"}}>รพ.มหาราช นครศรีธรรมราช</div>
+              <div style={{fontSize:13,fontWeight:800,color:"#1f3047"}}>EMS Equipment Check</div>
+              <div style={{fontSize:11,color:"#7f93ab"}}>รพ.มหาราช นครศรีธรรมราช</div>
             </div>
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 12px"}}>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>ผู้ตรวจเช็ค</div>
-              <div style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{role.icon} {role.short}</div>
-              <div style={{fontSize:13,color:"#f1f5f9",marginTop:2}}>{myName||"-"}</div>
+            <div style={{background:"#f6faff",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:"#7f93ab",marginBottom:4}}>ผู้ตรวจเช็ค</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#1f3047"}}>{role.icon} {role.short}</div>
+              <div style={{fontSize:13,color:"#1f3047",marginTop:2}}>{myName||"-"}</div>
             </div>
-            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 12px"}}>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>วันที่/เวร</div>
+            <div style={{background:"#f6faff",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:"#7f93ab",marginBottom:4}}>วันที่/เวร</div>
               <div style={{fontSize:13,fontWeight:700,color:sm.accent}}>{sm.icon} เวร{selShift}</div>
-              <div style={{fontSize:12,color:"#f1f5f9",marginTop:2}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</div>
+              <div style={{fontSize:12,color:"#1f3047",marginTop:2}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</div>
             </div>
           </div>
 
-          <div style={{background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
-            <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>ผลการตรวจเช็ค</div>
-            <div style={{fontSize:15,fontWeight:900,color:"#4ade80"}}>✓ ครบ {totalItems} รายการ</div>
-            {timeStr&&<div style={{fontSize:11,color:"#64748b",marginTop:4}}>บันทึกเมื่อ {timeStr} น.</div>}
+          <div style={{background:"rgba(18,160,120,0.08)",border:"1px solid #128a6a33",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+            <div style={{fontSize:11,color:"#7f93ab",marginBottom:4}}>ผลการตรวจเช็ค</div>
+            <div style={{fontSize:15,fontWeight:900,color:"#128a6a"}}>✓ ครบ {totalItems} รายการ</div>
+            {timeStr&&<div style={{fontSize:11,color:"#7f93ab",marginTop:4}}>บันทึกเมื่อ {timeStr} น.</div>}
           </div>
 
           {note&&(
-            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 12px"}}>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>📝 ปัญหา/ข้อเสนอแนะ</div>
-              <div style={{fontSize:13,color:"#f1f5f9"}}>{note}</div>
+            <div style={{background:"#f6faff",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:"#7f93ab",marginBottom:4}}>📝 ปัญหา/ข้อเสนอแนะ</div>
+              <div style={{fontSize:13,color:"#1f3047"}}>{note}</div>
             </div>
           )}
         </div>
 
         {/* Warning if duplicate */}
-        <div style={{fontSize:11,color:"#64748b",textAlign:"center",marginBottom:14}}>
+        <div style={{fontSize:11,color:"#7f93ab",textAlign:"center",marginBottom:14}}>
           📸 แคปหน้าจอตรงนี้ได้เลยค่ะ แล้วกด "กลับหน้าหลัก"
         </div>
 
-        <button onClick={onClose} style={{width:"100%",padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:"linear-gradient(90deg,#16a34a,#15803d)",color:"#fff"}}>
+        <button onClick={onClose} style={{width:"100%",padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:"linear-gradient(90deg,#22a37f,#1a8a6b)",color:"#fff"}}>
           กลับหน้าหลัก
         </button>
       </div>
@@ -1861,27 +1834,27 @@ export default function App(){
 
   const role=ROLE_MAP[myRole];
   const TABS=[
-    {id:"check",     label:"📋 บันทึก"},
-    {id:"summary",   label:"📋 สรุป 🔒"},
-    {id:"roster",    label:"👥 รายชื่อเวร 🔒"},
-    {id:"dashboard", label:"📊 Dashboard 🔒"},
+    {id:"check",     label:"📝 บันทึก"},
+    {id:"summary",   label:"🗂️ สรุป 🔒"},
+    {id:"roster",    label:"🫶 รายชื่อเวร 🔒"},
+    {id:"dashboard", label:"📈 Dashboard 🔒"},
     {id:"settings",  label:"⚙️ ตั้งค่า 🔒"},
   ];
 
   return(
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e293b)",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",color:"#f1f5f9"}}>
-      <div style={{background:"linear-gradient(90deg,#dc2626,#b91c1c)",padding:"14px 18px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 4px 24px rgba(220,38,38,0.4)",flexWrap:"wrap"}}>
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f3f8ff,#ecf7f6)",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",color:"#1f3047"}}>
+      <div style={{background:"linear-gradient(100deg,#d4ecfb,#dfe3fc)",color:"#1f3047",padding:"14px 18px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 14px rgba(74,134,232,0.15)",flexWrap:"wrap"}}>
         <div style={{fontSize:26}}>🚑</div>
         <div>
           <div style={{fontSize:17,fontWeight:800,letterSpacing:1}}>EMS Equipment Check</div>
           <div style={{fontSize:11,opacity:.85}}>รพ.มหาราช · ☁️ Firebase</div>
         </div>
-        <button onClick={switchRole} style={{display:"flex",alignItems:"center",gap:6,background:role.color+"33",border:`1.5px solid ${role.color}66`,borderRadius:20,padding:"5px 14px",cursor:"pointer",fontFamily:"inherit",color:"#f1f5f9",fontSize:13,fontWeight:700}}>
+        <button onClick={switchRole} style={{display:"flex",alignItems:"center",gap:6,background:role.color+"33",border:`1.5px solid ${role.color}66`,borderRadius:20,padding:"5px 14px",cursor:"pointer",fontFamily:"inherit",color:"#1f3047",fontSize:13,fontWeight:700}}>
           {role.icon} {role.short} <span style={{fontSize:11,opacity:.7}}>เปลี่ยน</span>
         </button>
         <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap"}}>
           {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setView(t.id)} style={{padding:"7px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:view===t.id?"#fff":"rgba(255,255,255,0.15)",color:view===t.id?"#dc2626":"#fff",transition:"all 0.2s"}}>
+            <button key={t.id} onClick={()=>setView(t.id)} style={{padding:"7px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:view===t.id?"#ffffff":"rgba(255,255,255,0.55)",color:view===t.id?"#2f6fd6":"#3b4f69",boxShadow:view===t.id?"0 2px 8px rgba(74,134,232,0.18)":"none",transition:"all 0.2s"}}>
               {t.label}
             </button>
           ))}
@@ -1890,11 +1863,11 @@ export default function App(){
 
       <div style={{maxWidth:720,margin:"0 auto",padding:"18px 14px"}}>
         {view!=="settings"&&(
-          <div style={{background:"rgba(255,255,255,0.05)",borderRadius:14,padding:"13px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{background:"#ffffff",borderRadius:14,padding:"13px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
             {view==="check"?(
               <>
-                <span style={{fontSize:13,color:"#94a3b8"}}>📅</span>
-                <span style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</span>
+                <span style={{fontSize:13,color:"#5d7290"}}>🗓️</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#1f3047"}}>{selDay} {MONTH_NAMES[selMonth]} {selYear+543}</span>
                 <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
                   {(myRole==="driv"?DRIV_SHIFTS:SHIFTS).map(s=>(
                     <button key={s} onClick={()=>{
@@ -1907,7 +1880,7 @@ export default function App(){
                         if(inDirk){const y=new Date(getThaiNow());y.setDate(y.getDate()-1);setSelYear(y.getFullYear());setSelMonth(y.getMonth());setSelDay(y.getDate());}
                         else{setSelYear(shiftYear);setSelMonth(shiftMonth);setSelDay(shiftDay);}
                       } else {setSelYear(shiftYear);setSelMonth(shiftMonth);setSelDay(shiftDay);}
-                    }} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s].accent:"rgba(255,255,255,0.07)",color:selShift===s?"#fff":"#94a3b8",transition:"all 0.2s"}}>
+                    }} style={{padding:"6px 13px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:selShift===s?SHIFT_META[s].accent:"#f1f6fc",color:selShift===s?"#fff":"#5d7290",transition:"all 0.2s"}}>
                       {SHIFT_META[s].icon} {s}
                     </button>
                   ))}
