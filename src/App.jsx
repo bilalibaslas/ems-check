@@ -296,30 +296,81 @@ function RoleSelectScreen({onSelect}){
 }
 
 /* ── Para Check Page ── */
-/* ── ช่องพิมพ์ชื่อที่มีรายชื่อเด้งขึ้นมาให้เลือก ── */
+/* ── รายชื่อเจ้าหน้าที่ (staff) ใช้เป็นตัวเลือกตอนพิมพ์ชื่อ ── */
+const STAFF_GROUPS=[
+  {id:"ep",     label:"EP (แพทย์)"},
+  {id:"nurse",  label:"Para / ENP / RN (ไม้ 9, A, A1, A2)"},
+  {id:"aemt",   label:"A-EMT"},
+  {id:"driv",   label:"พขร."},
+  {id:"vehicle",label:"ทะเบียนรถ"},
+];
+const FIELD_GROUP={ep:"ep",p9:"nurse",a:"nurse",a1:"nurse",a2:"nurse",aemt:"aemt",driv:"driv",vehicle:"vehicle"};
+function staffKey(name){return sanitizeKey(String(name).trim()).slice(0,200)||"_";}
+function addStaff(group,name){
+  const n=String(name||"").trim();
+  if(!n||!group) return Promise.resolve();
+  return set(ref(db,`staff/${group}/${staffKey(n)}`),n);
+}
+function useStaff(){
+  const [staff,setStaff]=useState({});
+  useEffect(()=>{
+    const u=onValue(ref(db,"staff"),snap=>{
+      const v=snap.val()||{};
+      setStaff(Object.fromEntries(Object.entries(v).map(([g,o])=>[g,Object.values(o||{}).filter(x=>typeof x==="string")])));
+    });
+    return()=>u();
+  },[]);
+  return staff;
+}
+// ตัดคำนำหน้า (นาย, นส., พญ., จฉพ. ฯลฯ) เพื่อให้พิมพ์ตัวแรกของชื่อจริงแล้วเจอ
+const TITLE_RE=/^(นางสาว|น\.ส\.|นส\.?|นาย|นาง|พญ\.?|นพ\.?|ทพ\.?|ทพญ\.?|ภก\.?|ภญ\.?|พว\.?|พย\.?|จฉพ\.?|จพ\.?|ว่าที่\s*ร\.?ต\.?|ด\.ต\.|จ\.ส\.ต\.|ส\.ต\.อ\.|ส\.ต\.ต\.|ร\.ต\.|ดร\.?)\s*/;
 function normName(t){return String(t||"").toLowerCase().replace(/\s+/g,"").replace(/\./g,"");}
-function NameInput({value,onChange,options,placeholder}){
-  const [open,setOpen]=useState(false);
-  const q=normName(value);
-  const matches=(q?options.filter(n=>normName(n).includes(q)&&n!==value):options).slice(0,8);
+function bareName(t){return normName(String(t||"").trim().replace(TITLE_RE,""));}
+function matchNames(options,query,limit=8){
+  const q=normName(query);
+  const list=[...new Set(options)];
+  if(!q) return list.sort((x,y)=>bareName(x).localeCompare(bareName(y),"th")).slice(0,limit);
+  return list
+    .map(n=>{
+      const b=bareName(n),f=normName(n);
+      const words=String(n).trim().replace(TITLE_RE,"").split(/\s+/).map(normName);
+      // ตัวอักษรเดียว: เอาเฉพาะชื่อหรือนามสกุลที่ขึ้นต้นด้วยตัวนั้น / ตั้งแต่ 2 ตัว: ค้นทั้งชื่อ
+      const score=b.startsWith(q)?0:words.some(w=>w.startsWith(q))?1:(q.length>1&&f.startsWith(q))?2:(q.length>1&&(b.includes(q)||f.includes(q)))?3:9;
+      return{n,score};
+    })
+    .filter(x=>x.score<9)
+    .sort((x,y)=>x.score-y.score||bareName(x.n).localeCompare(bareName(y.n),"th"))
+    .slice(0,limit).map(x=>x.n);
+}
+
+/* ── ช่องพิมพ์ชื่อที่มีรายชื่อเด้งขึ้นมาให้เลือก ── */
+function NameInput({value,onChange,options,placeholder,onAdd}){
+  const [open,setOpen]=useState(false); const [added,setAdded]=useState("");
+  const matches=matchNames(options,value).filter(n=>n!==value);
+  const typed=String(value||"").trim();
+  const canAdd=!!onAdd&&typed.length>1&&!options.some(n=>normName(n)===normName(typed));
+  const ROW={display:"block",width:"100%",minHeight:44,padding:"10px 14px",textAlign:"left",border:"none",borderBottom:"1px solid #334155",background:"transparent",color:"#f1f5f9",fontFamily:"inherit",fontSize:15,cursor:"pointer"};
   return(
     <div style={{position:"relative"}}>
-      <input value={value} onChange={e=>{onChange(e.target.value);setOpen(true);}}
+      <input value={value} onChange={e=>{onChange(e.target.value);setOpen(true);setAdded("");}}
         onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)}
         autoComplete="off" placeholder={placeholder}
-        style={{...BASE_INP,width:"100%",boxSizing:"border-box",fontSize:16}}/>
+        style={{...BASE_INP,width:"100%",boxSizing:"border-box",fontSize:16,paddingRight:40}}/>
       {value&&(
         <button type="button" aria-label="ล้างชื่อ" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange("");setOpen(true);}}
           style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",width:36,height:36,border:"none",background:"transparent",color:"#64748b",fontSize:18,cursor:"pointer"}}>×</button>
       )}
-      {open&&matches.length>0&&(
-        <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:20,background:"#1e293b",border:"1.5px solid #475569",borderRadius:10,boxShadow:"0 10px 30px rgba(0,0,0,0.5)",maxHeight:264,overflowY:"auto"}}>
+      {added&&<div style={{fontSize:12,color:"#4ade80",marginTop:4}}>✓ เพิ่ม “{added}” เข้ารายชื่อแล้ว</div>}
+      {open&&(matches.length>0||canAdd)&&(
+        <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:20,background:"#1e293b",border:"1.5px solid #475569",borderRadius:10,boxShadow:"0 10px 30px rgba(0,0,0,0.5)",maxHeight:300,overflowY:"auto"}}>
           {matches.map(n=>(
-            <button key={n} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange(n);setOpen(false);}}
-              style={{display:"block",width:"100%",minHeight:44,padding:"10px 14px",textAlign:"left",border:"none",borderBottom:"1px solid #334155",background:"transparent",color:"#f1f5f9",fontFamily:"inherit",fontSize:15,cursor:"pointer"}}>
-              {n}
-            </button>
+            <button key={n} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange(n);setOpen(false);}} style={ROW}>{n}</button>
           ))}
+          {canAdd&&(
+            <button type="button" onMouseDown={e=>e.preventDefault()}
+              onClick={()=>{onAdd(typed);onChange(typed);setAdded(typed);setOpen(false);}}
+              style={{...ROW,color:"#fbbf24",fontWeight:700,borderBottom:"none"}}>＋ เพิ่ม “{typed}” เข้ารายชื่อ</button>
+          )}
         </div>
       )}
     </div>
@@ -390,14 +441,15 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
   // ไม้ A / A1 / A2 / ไม้ 9 ใช้รายชื่อแนะนำชุดเดียวกัน
   const NURSE=["p9","a","a1","a2"];
   const pool=ids=>[...new Set(Object.values(all).flatMap(r=>ids.map(i=>r&&r[i])).filter(Boolean))].sort();
-  const merge=(...lists)=>[...new Set(lists.flat().filter(Boolean))].sort((x,y)=>x.localeCompare(y,"th"));
+  const staff=useStaff();
+  const merge=(...lists)=>[...new Set(lists.flat().filter(Boolean))];
+  const nurseList=merge(staff.nurse||[],pool(NURSE),checkNames.para);
   const suggestions={
-    ep:merge(pool(["ep"])),
-    p9:merge(pool(NURSE),checkNames.para), a:merge(pool(NURSE),checkNames.para),
-    a1:merge(pool(NURSE),checkNames.para), a2:merge(pool(NURSE),checkNames.para),
-    aemt:merge(pool(["aemt"]),checkNames.aemt),
-    driv:merge(pool(["driv"]),checkNames.driv),
-    vehicle:merge(pool(["vehicle"])),
+    ep:merge(staff.ep||[],pool(["ep"])),
+    p9:nurseList, a:nurseList, a1:nurseList, a2:nurseList,
+    aemt:merge(staff.aemt||[],pool(["aemt"]),checkNames.aemt),
+    driv:merge(staff.driv||[],pool(["driv"]),checkNames.driv),
+    vehicle:merge(staff.vehicle||[],pool(["vehicle"])),
   };
 
   function setField(id,v){setForm(p=>({...p,[id]:v}));setSaved(false);setCopied(false);}
@@ -409,6 +461,10 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
       fields.forEach(f=>data[f.id]=(form[f.id]||"").trim());
       data.savedAt=new Date().toISOString();
       await set(ref(db,`roster/${key}`),data);
+      // ชื่อที่กรอกจะถูกเก็บเข้ารายชื่อเจ้าหน้าที่ด้วย ครั้งหน้าพิมพ์ตัวแรกก็เจอ
+      const known=g=>(staff[g]||[]).map(normName);
+      await Promise.all(fields.filter(f=>data[f.id]&&!known(FIELD_GROUP[f.id]).includes(normName(data[f.id])))
+        .map(f=>addStaff(FIELD_GROUP[f.id],data[f.id]).catch(()=>{})));
       setSaved(true);
     }catch(e){setErr("บันทึกไม่สำเร็จ: "+(e.message||e));}
     setSaving(false);
@@ -434,6 +490,7 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
             <div key={f.id} style={{marginBottom:10}}>
               <div style={{fontSize:12,color:"#94a3b8",marginBottom:4}}>{f.label}</div>
               <NameInput value={form[f.id]||""} onChange={v=>setField(f.id,v)} options={suggestions[f.id]}
+                onAdd={n=>addStaff(FIELD_GROUP[f.id],n).catch(e=>setErr("เพิ่มชื่อไม่สำเร็จ: "+(e.message||e)))}
                 placeholder={f.id==="vehicle"?"เช่น กษ 1139 นครศรีธรรมราช":"พิมพ์ชื่อ แล้วเลือกจากรายการ"}/>
             </div>
           ))}
@@ -1566,6 +1623,61 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
 }
 
 /* ── Settings ── */
+/* ── จัดการรายชื่อเจ้าหน้าที่ (ในแท็บตั้งค่า) ── */
+function StaffManager(){
+  const staff=useStaff();
+  const [group,setGroup]=useState("nurse");
+  const [text,setText]=useState(""); const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
+  const list=[...(staff[group]||[])].sort((x,y)=>bareName(x).localeCompare(bareName(y),"th"));
+  const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
+
+  async function addMany(){
+    const names=[...new Set(text.split(/\n|,/).map(x=>x.trim()).filter(Boolean))];
+    if(!names.length) return;
+    const have=list.map(normName);
+    const fresh=names.filter(n=>!have.includes(normName(n)));
+    setBusy(true);setMsg("");
+    try{await Promise.all(fresh.map(n=>addStaff(group,n)));setText("");setMsg(`✅ เพิ่ม ${fresh.length} ชื่อ`+(names.length>fresh.length?` (ซ้ำ ${names.length-fresh.length} ชื่อ ข้ามไป)`:""));}
+    catch(e){setMsg("⚠️ เพิ่มไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+  async function del(n){
+    if(!window.confirm(`ลบ “${n}” ออกจากรายชื่อ?`)) return;
+    try{await remove(ref(db,`staff/${group}/${staffKey(n)}`));}catch(e){setMsg("⚠️ ลบไม่สำเร็จ: "+(e.message||e));}
+  }
+
+  return(
+    <Card style={{border:"1.5px solid rgba(245,158,11,0.35)"}}>
+      <div style={{fontSize:14,fontWeight:800,color:"#fbbf24",marginBottom:4}}>👥 รายชื่อเจ้าหน้าที่</div>
+      <div style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>ชื่อในนี้จะเด้งขึ้นให้เลือก เมื่อพิมพ์ในหน้าลงเวร</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+        {STAFF_GROUPS.map(g=>(
+          <button key={g.id} type="button" onClick={()=>{setGroup(g.id);setMsg("");}} style={{...BTN,background:group===g.id?"#d97706":"rgba(255,255,255,0.07)",color:group===g.id?"#fff":"#94a3b8"}}>
+            {g.label} ({(staff[g.id]||[]).length})
+          </button>
+        ))}
+      </div>
+      <div style={{fontSize:12,color:"#94a3b8",marginBottom:6}}>เพิ่มชื่อ (วางได้หลายชื่อ บรรทัดละ 1 ชื่อ)</div>
+      <textarea value={text} onChange={e=>{setText(e.target.value);setMsg("");}} rows={4}
+        placeholder={group==="vehicle"?"กษ 1139 นครศรีธรรมราช":"นส.กานดา ศรีสุข\nนายสมชาย ขับดี"}
+        style={{...BASE_INP,width:"100%",boxSizing:"border-box",resize:"vertical",lineHeight:1.7,fontSize:16}}/>
+      <button type="button" onClick={addMany} disabled={busy} style={{...BTN,width:"100%",padding:"12px 0",marginTop:8,background:busy?"#475569":"#d97706",color:"#fff",fontSize:14}}>
+        {busy?"⏳ กำลังเพิ่ม...":"＋ เพิ่มเข้ารายชื่อ"}
+      </button>
+      {msg&&<div style={{fontSize:13,marginTop:8,color:msg.startsWith("⚠️")?"#f87171":"#4ade80"}}>{msg}</div>}
+      <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:6}}>
+        {list.length===0&&<div style={{fontSize:13,color:"#64748b"}}>ยังไม่มีรายชื่อในกลุ่มนี้</div>}
+        {list.map(n=>(
+          <div key={n} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 6px 6px 12px",background:"rgba(255,255,255,0.04)",borderRadius:8}}>
+            <span style={{flex:1,fontSize:14}}>{n}</span>
+            <button type="button" aria-label={`ลบ ${n}`} onClick={()=>del(n)} style={{...BTN,width:40,height:36,padding:0,background:"rgba(239,68,68,0.15)",color:"#f87171"}}>✕</button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function SettingsPage({myRole,equipment,onSaveEquip}){
   const role=ROLE_MAP[myRole];
   const [draft,setDraft]=useState([...(equipment[myRole]||[])]);
@@ -1637,6 +1749,8 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
           </div>
         </>
       )}
+
+      <StaffManager/>
 
       <Card style={{border:"1.5px solid rgba(251,191,36,0.3)"}}>
         <div style={{fontSize:14,fontWeight:800,color:"#fbbf24",marginBottom:14}}>🔑 เปลี่ยน PIN</div>
