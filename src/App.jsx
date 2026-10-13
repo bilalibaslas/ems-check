@@ -33,9 +33,9 @@ const PARA_GROUPS = [
   {
     id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#e25c86",
     items:[
-      {id:"ett",          label:"ETT no 3-8 (ระบุอันที่หมดเร็วสุด)",                       hasExp:true},
+      {id:"ett",          label:"ETT no 3-8 (ระบุอันที่หมดเร็วสุด)",                       hasExp:false},
       {id:"facemask",     label:"Face mask (ผู้ใหญ่, เด็ก 2 ขนาด)",                        hasExp:false},
-      {id:"ambubag",      label:"Ambubag (3 ขนาด) (ระบุอันที่หมดเร็วสุด)",                  hasExp:true},
+      {id:"ambubag",      label:"Ambubag (3 ขนาด) (ระบุอันที่หมดเร็วสุด)",                  hasExp:false},
       {id:"reservoir",    label:"Reservoir bag (ผู้ใหญ่, เด็ก)",                            hasExp:false},
       {id:"lma",          label:"LMA no 3",                                                  hasExp:false},
       {id:"csuction",     label:"Closed suction (ใช้แล้วเบิกด้วย)",                          hasExp:false},
@@ -67,7 +67,7 @@ const PARA_GROUPS = [
       {id:"10dns",        label:"10DNS 1,000 ml",                                           hasExp:false},
       {id:"5dw100",       label:"5DW 100 ml",                                               hasExp:false},
       {id:"emdrug",       label:"กล่องยา Emergency (3 กล่อง)",                              hasExp:false},
-      {id:"etomidate",    label:"Etomidate, Succinylcholine (ในตู้เย็น)",                    hasExp:true},
+      {id:"etomidate",    label:"Etomidate, Succinylcholine (ในตู้เย็น)",                    hasExp:false},
     ]
   },
   {
@@ -143,7 +143,7 @@ function dutyName(r,roleId,shift){
   if(roleId==="para") return (shift==="ดึก"?[r.a1,r.a2]:[r.p9,r.a]).filter(Boolean).join(" / ");
   return r[roleId]||"";
 }
-function buildShiftReport(y,m,d,shift,r,checks){
+function buildShiftReport(y,m,d,shift,r,checks,expLines=[]){
   r=r||{};
   return [
     "รายงานเวร EMS รพ.มหาราช นศ.",
@@ -155,6 +155,7 @@ function buildShiftReport(y,m,d,shift,r,checks){
     `Para/ENP/RN : ${checkMark(checks.para,"para")}`,
     `A-EMT : ${checkMark(checks.aemt,"aemt")}`,
     `พขร. : ${checkMark(checks.driv,"driv")}`,
+    ...expLines,
   ].join("\n");
 }
 function copyToClipboard(text){
@@ -207,6 +208,86 @@ function ettExpText(days){
   if(days===0) return "หมดอายุวันนี้! ⚠️";
   if(days<=30) return `เหลือ ${days} วัน ⚠️`;
   return `เหลือ ${days} วัน ✓`;
+}
+
+/* ── ทะเบียนวันหมดอายุ: กรอกครั้งเดียวต่อล็อต แล้วระบบเตือนเอง ── */
+const EXP_WARN_DAYS=10;
+const ETT_SIZES=["3","3.5","4","4.5","5","5.5","6","6.5","7","7.5","8"];
+const EXPIRY_GROUPS=[
+  {id:"airway",label:"Airway",icon:"🫁",items:[
+    ...ETT_SIZES.flatMap(z=>(z==="7.5"||z==="8")
+      ?[{id:`ett_${z.replace(".","_")}_1`,label:`ETT เบอร์ ${z} (ชิ้นที่ 1)`},{id:`ett_${z.replace(".","_")}_2`,label:`ETT เบอร์ ${z} (ชิ้นที่ 2)`}]
+      :[{id:`ett_${z.replace(".","_")}`,label:`ETT เบอร์ ${z}`}]),
+    {id:"facemask_adult",label:"Face mask ผู้ใหญ่"},
+    {id:"facemask_child",label:"Face mask เด็ก"},
+    {id:"ambu_250",label:"Ambu bag 250 ml"},
+    {id:"ambu_500",label:"Ambu bag 500 ml"},
+    {id:"ambu_1000",label:"Ambu bag 1,000 ml"},
+    {id:"reservoir_s",label:"Reservoir bag เล็ก"},
+    {id:"reservoir_l",label:"Reservoir bag ใหญ่"},
+    {id:"lma3",label:"LMA เบอร์ 3"},
+    {id:"closed_suction",label:"Closed suction"},
+    {id:"stylet_newborn",label:"Stylet แรกเกิด"},
+    {id:"stylet_child",label:"Stylet เด็กโต"},
+    {id:"stylet_adult",label:"Stylet ผู้ใหญ่"},
+    {id:"neb_ett",label:"Set พ่นยาทาง ETT"},
+    {id:"corrugate",label:"Corrugate"},
+  ]},
+  {id:"drug",label:"ยา",icon:"💊",items:[
+    {id:"drugbox_1",label:"กล่องยา กล่องที่ 1"},
+    {id:"drugbox_2",label:"กล่องยา กล่องที่ 2"},
+    {id:"drugbox_3",label:"กล่องยา กล่องที่ 3"},
+    {id:"etomidate",label:"Etomidate"},
+    {id:"succinylcholine",label:"Succinylcholine"},
+  ]},
+  {id:"oxygen",label:"ออกซิเจน / พ่นยา",icon:"🫧",items:[
+    {id:"nasal_small",label:"Nasal cannula เด็กเล็ก"},
+    {id:"nasal_big",label:"Nasal cannula เด็กโต"},
+    {id:"maskbag_child",label:"Mask c bag เด็ก"},
+    {id:"neb_child",label:"Set พ่นยาเด็ก"},
+    {id:"o2_humidifier",label:"Oxygen humidifier bottle"},
+  ]},
+  {id:"other",label:"อื่น ๆ",icon:"🩹",items:[
+    {id:"nss_irrigation",label:"NSS irrigation 1,000 ml"},
+    {id:"alcohol_wound",label:"Alcohol ล้างแผล"},
+    {id:"delivery_set",label:"Set คลอด"},
+  ]},
+];
+const EXPIRY_ITEMS=EXPIRY_GROUPS.flatMap(g=>g.items.map(i=>({...i,group:g.id})));
+function expDaysLeft(iso){
+  if(!iso||!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y,m,d]=iso.split("-").map(Number);
+  const t=getThaiNow(); const today=new Date(t.getFullYear(),t.getMonth(),t.getDate());
+  return Math.round((new Date(y,m-1,d)-today)/86400000);
+}
+function expStatus(iso){
+  const d=expDaysLeft(iso);
+  if(d===null) return {key:"none",days:null,color:"#7f93ab",bg:"#f1f6fc",text:"ยังไม่ระบุ"};
+  if(d<0)  return {key:"expired",days:d,color:"#d6456f",bg:"rgba(226,92,134,0.12)",text:`หมดอายุแล้ว ${-d} วัน`};
+  if(d===0) return {key:"expired",days:d,color:"#d6456f",bg:"rgba(226,92,134,0.12)",text:"หมดอายุวันนี้"};
+  if(d<=EXP_WARN_DAYS) return {key:"soon",days:d,color:"#c26a1e",bg:"rgba(232,137,58,0.14)",text:`อีก ${d} วัน`};
+  return {key:"ok",days:d,color:"#128a6a",bg:"rgba(18,160,120,0.10)",text:`อีก ${d} วัน`};
+}
+function thaiShortDate(iso){
+  if(!iso) return "-";
+  const [y,m,d]=iso.split("-").map(Number);
+  return `${d} ${MONTH_NAMES[m-1].slice(0,3)} ${String(y+543).slice(2)}`;
+}
+function useExpiry(){
+  const [exp,setExp]=useState({});
+  useEffect(()=>{const u=onValue(ref(db,"expiry"),s=>setExp(s.val()||{}));return()=>u();},[]);
+  return exp;
+}
+// รายการที่ต้องแจ้งเตือน (หมดแล้ว / ใกล้หมด) เรียงจากใกล้สุด
+function expiryAlerts(exp){
+  return EXPIRY_ITEMS.map(i=>({...i,date:exp[i.id]?.date||"",st:expStatus(exp[i.id]?.date)}))
+    .filter(x=>x.st.key==="expired"||x.st.key==="soon")
+    .sort((a,b)=>a.st.days-b.st.days);
+}
+function expiryReportLines(exp){
+  const al=expiryAlerts(exp);
+  if(!al.length) return [];
+  return ["","⏰ วันหมดอายุ",...al.map(a=>`${a.st.key==="expired"?"🔴":"🟠"} ${a.label} : ${a.st.text} (${thaiShortDate(a.date)})`)];
 }
 
 const BASE_INP={background:"#f1f6fc",border:"1.5px solid #d3e1f1",borderRadius:9,padding:"10px 14px",color:"#1f3047",fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box",width:"100%"};
@@ -441,7 +522,8 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
     setSaving(false);
   }
 
-  const report=buildShiftReport(selYear,selMonth,selDay,selShift,form,checks);
+  const expiry=useExpiry();
+  const report=buildShiftReport(selYear,selMonth,selDay,selShift,form,checks,expiryReportLines(expiry));
 
   return(
     <Card style={{border:"1.5px solid #9fd3e6"}}>
@@ -667,7 +749,7 @@ const AEMT_GROUPS = [
       {id:"nebu",       label:"Set พ่นยา (ผู้ใหญ่, เด็ก)",                            hasExp:false},
       {id:"suction",    label:"Suction (เครื่อง, สาย, ความสะอาด)",                    hasExp:false},
       {id:"suctiontubes",label:"สาย Suction (ดำ, ขาว, เขียว, ส้ม, แดง)",             hasExp:false},
-      {id:"o2bottle",   label:"Oxygen Humidifier Bottle",                              hasExp:true},
+      {id:"o2bottle",   label:"Oxygen Humidifier Bottle",                              hasExp:false},
     ]
   },
   {
@@ -689,7 +771,7 @@ const AEMT_GROUPS = [
   {
     id:"equipment", label:"3. Equipment", icon:"🔧", color:"#e8893a",
     items:[
-      {id:"delivery",   label:"Set คลอด",                                             hasExp:true},
+      {id:"delivery",   label:"Set คลอด",                                             hasExp:false},
       {id:"lucas",      label:"LUCAS (แบต)",                                           hasExp:false},
       {id:"glucometer", label:"Glucometer and Test strips",                           hasExp:false},
       {id:"thermo",     label:"Thermometer",                                          hasExp:false},
@@ -1596,6 +1678,129 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
 }
 
 /* ── Settings ── */
+/* ── ป้ายเตือนวันหมดอายุ (โชว์บนหน้าเช็คทุกตำแหน่ง) ── */
+function ExpiryBanner({onOpen}){
+  const exp=useExpiry();
+  const al=expiryAlerts(exp);
+  const missing=EXPIRY_ITEMS.filter(i=>!exp[i.id]?.date).length;
+  if(!al.length&&!missing) return null;
+  const expired=al.filter(a=>a.st.key==="expired");
+  const bad=expired.length>0;
+  return(
+    <div style={{background:bad?"rgba(226,92,134,0.10)":al.length?"rgba(232,137,58,0.10)":"#f1f6fc",border:`1.5px solid ${bad?"#e25c8666":al.length?"#e8893a66":"#d3e1f1"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+      {al.length>0&&(
+        <>
+          <div style={{fontSize:14,fontWeight:800,color:bad?"#d6456f":"#c26a1e",marginBottom:6}}>
+            ⏰ {bad?`หมดอายุแล้ว ${expired.length} รายการ`:""}{bad&&al.length>expired.length?" · ":""}{al.length>expired.length?`ใกล้หมดอายุ ${al.length-expired.length} รายการ`:""}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
+            {al.slice(0,6).map(a=>(
+              <div key={a.id} style={{display:"flex",gap:8,fontSize:13}}>
+                <span style={{flex:1,color:"#1f3047"}}>{a.st.key==="expired"?"🔴":"🟠"} {a.label}</span>
+                <span style={{color:a.st.color,fontWeight:700}}>{a.st.text}</span>
+              </div>
+            ))}
+            {al.length>6&&<div style={{fontSize:12,color:"#5d7290"}}>และอีก {al.length-6} รายการ</div>}
+          </div>
+        </>
+      )}
+      {missing>0&&<div style={{fontSize:12,color:"#5d7290",marginBottom:8}}>📝 ยังไม่ระบุวันหมดอายุ {missing} รายการ</div>}
+      <button type="button" onClick={onOpen} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#4a86e8",color:"#fff"}}>
+        ไปที่หน้าวันหมดอายุ →
+      </button>
+    </div>
+  );
+}
+
+/* ── หน้าวันหมดอายุ (ทุกคนแก้ได้ ไม่ต้องใช้ PIN) ── */
+const KEY_EXP_NAME="ems_exp_editor";
+function ExpiryPage(){
+  const exp=useExpiry();
+  const staff=useStaff();
+  const [who,setWho]=useState(()=>ls(KEY_EXP_NAME,""));
+  const [filter,setFilter]=useState("alert");
+  const [editing,setEditing]=useState(null); const [draft,setDraft]=useState("");
+  const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
+  const names=[...new Set([...(staff.nurse||[]),...(staff.aemt||[]),...(staff.ep||[])])];
+  const rows=EXPIRY_ITEMS.map(i=>({...i,rec:exp[i.id]||null,st:expStatus(exp[i.id]?.date)}));
+  const count=k=>rows.filter(r=>k==="alert"?(r.st.key==="expired"||r.st.key==="soon"):r.st.key===k).length;
+  const show=r=>filter==="all"||(filter==="alert"&&(r.st.key==="expired"||r.st.key==="soon"))||(filter==="none"&&r.st.key==="none");
+  const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
+
+  function startEdit(r){setEditing(r.id);setDraft(r.rec?.date||"");setMsg("");}
+  async function save(r){
+    if(!who.trim()){setMsg("⚠️ กรุณาใส่ชื่อผู้บันทึกด้านบนก่อน");return;}
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(draft)){setMsg("⚠️ กรุณาเลือกวันหมดอายุ");return;}
+    setBusy(true);setMsg("");
+    try{
+      const at=new Date().toISOString();
+      const rec={date:draft,by:who.trim(),at};
+      await set(ref(db,`expiry/${r.id}`),rec);
+      await set(ref(db,`expiryLog/${r.id}/${Date.now()}`),{...rec,prev:r.rec?.date||""}).catch(()=>{});
+      ss(KEY_EXP_NAME,who.trim());
+      setEditing(null);setMsg(`✅ บันทึก ${r.label} แล้ว`);
+    }catch(e){setMsg("⚠️ บันทึกไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+
+  return(
+    <div>
+      <Card>
+        <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>⏰ วันหมดอายุ</div>
+        <div style={{fontSize:13,color:"#5d7290",marginBottom:12,lineHeight:1.6}}>
+          กรอกวันหมดอายุเฉพาะตอน<strong>ใช้ไปแล้วเติมของใหม่</strong>เท่านั้น ระบบจะเตือนเองเมื่อเหลือ ≤ {EXP_WARN_DAYS} วัน
+        </div>
+        <div style={{fontSize:12,color:"#5d7290",marginBottom:4}}>ชื่อผู้บันทึก</div>
+        <NameInput value={who} onChange={setWho} options={names} placeholder="พิมพ์ชื่อของคุณ"/>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:12}}>
+          {[["alert",`⚠️ ต้องดู (${count("alert")})`],["none",`📝 ยังไม่ระบุ (${count("none")})`],["all",`ทั้งหมด (${rows.length})`]].map(([id,l])=>(
+            <button key={id} type="button" onClick={()=>setFilter(id)} style={{...BTN,background:filter===id?"#2a9fb8":"#f1f6fc",color:filter===id?"#fff":"#5d7290"}}>{l}</button>
+          ))}
+        </div>
+        {msg&&<div style={{fontSize:13,marginTop:10,color:msg.startsWith("⚠️")?"#d6456f":"#128a6a"}}>{msg}</div>}
+      </Card>
+
+      {filter==="alert"&&count("alert")===0&&(
+        <Card style={{textAlign:"center",color:"#128a6a",fontWeight:700}}>✨ ไม่มีของหมดอายุหรือใกล้หมดอายุ</Card>
+      )}
+
+      {EXPIRY_GROUPS.map(g=>{
+        const list=rows.filter(r=>r.group===g.id&&show(r)).sort((a,b)=>filter==="all"?0:(a.st.days??9999)-(b.st.days??9999));
+        if(!list.length) return null;
+        return(
+          <Card key={g.id} style={{padding:"14px 14px 8px"}}>
+            <div style={{fontSize:14,fontWeight:800,marginBottom:10}}>{g.icon} {g.label}</div>
+            {list.map(r=>(
+              <div key={r.id} style={{borderTop:"1px solid #e3edf8",padding:"10px 2px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600}}>{r.label}</div>
+                    <div style={{fontSize:12,color:"#7f93ab"}}>
+                      {r.rec?.date?`Exp ${thaiShortDate(r.rec.date)}`:"ยังไม่ระบุวันหมดอายุ"}
+                      {r.rec?.by?` · ${r.rec.by}`:""}
+                    </div>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:r.st.color,background:r.st.bg,padding:"4px 10px",borderRadius:99,whiteSpace:"nowrap"}}>{r.st.text}</span>
+                  {editing!==r.id&&(
+                    <button type="button" onClick={()=>startEdit(r)} style={{...BTN,background:"#e9f1fb",color:"#2f6fd6",minHeight:36}}>แก้</button>
+                  )}
+                </div>
+                {editing===r.id&&(
+                  <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                    <input type="date" value={draft} onChange={e=>setDraft(e.target.value)} style={{...BASE_INP,width:"auto",flex:"1 1 160px",fontSize:16}}/>
+                    <button type="button" disabled={busy} onClick={()=>save(r)} style={{...BTN,background:"#4a86e8",color:"#fff"}}>{busy?"⏳":"บันทึก"}</button>
+                    <button type="button" onClick={()=>setEditing(null)} style={{...BTN,background:"#f1f6fc",color:"#5d7290"}}>ยกเลิก</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ── จัดการรายชื่อเจ้าหน้าที่ (ในแท็บตั้งค่า) ── */
 function StaffManager(){
   const staff=useStaff();
@@ -1835,6 +2040,7 @@ export default function App(){
   const role=ROLE_MAP[myRole];
   const TABS=[
     {id:"check",     label:"📝 บันทึก"},
+    {id:"expiry",    label:"⏰ วันหมดอายุ"},
     {id:"summary",   label:"🗂️ สรุป 🔒"},
     {id:"roster",    label:"🫶 รายชื่อเวร 🔒"},
     {id:"dashboard", label:"📈 Dashboard 🔒"},
@@ -1862,7 +2068,7 @@ export default function App(){
       </div>
 
       <div style={{maxWidth:720,margin:"0 auto",padding:"18px 14px"}}>
-        {view!=="settings"&&(
+        {view!=="settings"&&view!=="expiry"&&(
           <div style={{background:"#ffffff",borderRadius:14,padding:"13px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
             {view==="check"?(
               <>
@@ -1899,6 +2105,8 @@ export default function App(){
             )}
           </div>
         )}
+        {view==="check"&&<ExpiryBanner onOpen={()=>setView("expiry")}/>}
+        {view==="expiry"&&<ExpiryPage/>}
         {view==="check"&&myRole==="para"&&<ParaCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
         {view==="check"&&myRole==="aemt"&&<AemtCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
         {view==="check"&&myRole==="driv"&&<DrivCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
