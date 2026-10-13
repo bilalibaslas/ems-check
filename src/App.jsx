@@ -95,6 +95,70 @@ function ls(key,fb){try{const v=localStorage.getItem(key);return v?JSON.parse(v)
 function ss(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch{}}
 function getDays(y,m){return new Date(y,m+1,0).getDate();}
 function recKey(y,m,d,shift,roleId){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}_${shift}_${roleId}`;}
+
+/* ── รายชื่อผู้ปฏิบัติงานรายเวร (roster) ── */
+function dateStr(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
+function rosterKey(y,m,d,shift){return `${dateStr(y,m,d)}_${shift}`;}
+// พขร. เวรบ่ายและดึกบันทึกรวมเป็น "บ่าย/ดึก" ซึ่ง Firebase เก็บซ้อนเป็น records/{วันที่}_บ่าย/ดึก_driv
+function drivPath(y,m,d,shift){return shift==="เช้า"?`records/${recKey(y,m,d,"เช้า","driv")}`:`records/${dateStr(y,m,d)}_บ่าย/ดึก_driv`;}
+function getEntry(allData,y,m,d,shift,roleId){
+  if(roleId==="driv"&&shift!=="เช้า") return allData[`${dateStr(y,m,d)}_บ่าย`]?.["ดึก_driv"];
+  return allData[recKey(y,m,d,shift,roleId)];
+}
+function roleTotal(roleId){
+  if(roleId==="para") return PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
+  if(roleId==="aemt") return AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
+  if(roleId==="driv") return DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
+  return 0;
+}
+function entryDone(e){return e?Object.values(e.checked||{}).filter(Boolean).length:0;}
+function entryOK(e,roleId){const t=roleTotal(roleId);return !!(e&&e.name&&t>0&&entryDone(e)===t);}
+function checkMark(e,roleId){
+  if(!e) return "ยังไม่เช็ค ❌";
+  const t=roleTotal(roleId),d=entryDone(e);
+  return d===t&&t>0?"เช็คแล้ว ✅":`เช็คไม่ครบ ${d}/${t} ⚠️`;
+}
+// ช่องรายชื่อ: เวรเช้า/บ่าย = Para หรือ ไม้ 9 + ไม้ A, เวรดึก = ไม้ A1 + ไม้ A2
+const ROSTER_ALL=[
+  {id:"ep",     label:"EP"},
+  {id:"p9",     label:"Para หรือ ไม้ 9", day:true},
+  {id:"a",      label:"ไม้ A",           day:true},
+  {id:"a1",     label:"ไม้ A1",          night:true},
+  {id:"a2",     label:"ไม้ A2",          night:true},
+  {id:"aemt",   label:"A-EMT"},
+  {id:"driv",   label:"พขร."},
+  {id:"vehicle",label:"ทะเบียนรถที่ใช้"},
+];
+function rosterFieldsFor(shift){
+  const night=shift==="ดึก";
+  return ROSTER_ALL.filter(f=>night?!f.day:!f.night);
+}
+// ชื่อผู้อยู่เวรที่รับผิดชอบเช็คของแต่ละตำแหน่งในแอป
+function dutyName(r,roleId,shift){
+  if(!r) return "";
+  if(roleId==="para") return (shift==="ดึก"?[r.a1,r.a2]:[r.p9,r.a]).filter(Boolean).join(" / ");
+  return r[roleId]||"";
+}
+function buildShiftReport(y,m,d,shift,r,checks){
+  r=r||{};
+  return [
+    "รายงานเวร EMS รพ.มหาราช นศ.",
+    `เวร : ${shift}`,
+    `วันที่ : ${d} ${MONTH_NAMES[m]} ${y+543}`,
+    ...rosterFieldsFor(shift).map(f=>`${f.label} : ${r[f.id]||"-"}`),
+    "",
+    "การเช็ครถ",
+    `Para/ENP/RN : ${checkMark(checks.para,"para")}`,
+    `A-EMT : ${checkMark(checks.aemt,"aemt")}`,
+    `พขร. : ${checkMark(checks.driv,"driv")}`,
+  ].join("\n");
+}
+function copyToClipboard(text){
+  const fallback=()=>{const t=document.createElement("textarea");t.value=text;t.style.position="fixed";t.style.opacity="0";document.body.appendChild(t);t.select();try{document.execCommand("copy");}catch{}document.body.removeChild(t);};
+  if(navigator.clipboard&&navigator.clipboard.writeText) return navigator.clipboard.writeText(text).catch(fallback);
+  fallback(); return Promise.resolve();
+}
+function lineShareUrl(text){return "https://line.me/R/share?text="+encodeURIComponent(text);}
 function getThaiNow(){
   return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Bangkok"}));
 }
@@ -232,6 +296,172 @@ function RoleSelectScreen({onSelect}){
 }
 
 /* ── Para Check Page ── */
+/* ── ช่องพิมพ์ชื่อที่มีรายชื่อเด้งขึ้นมาให้เลือก ── */
+function normName(t){return String(t||"").toLowerCase().replace(/\s+/g,"").replace(/\./g,"");}
+function NameInput({value,onChange,options,placeholder}){
+  const [open,setOpen]=useState(false);
+  const q=normName(value);
+  const matches=(q?options.filter(n=>normName(n).includes(q)&&n!==value):options).slice(0,8);
+  return(
+    <div style={{position:"relative"}}>
+      <input value={value} onChange={e=>{onChange(e.target.value);setOpen(true);}}
+        onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)}
+        autoComplete="off" placeholder={placeholder}
+        style={{...BASE_INP,width:"100%",boxSizing:"border-box",fontSize:16}}/>
+      {value&&(
+        <button type="button" aria-label="ล้างชื่อ" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange("");setOpen(true);}}
+          style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",width:36,height:36,border:"none",background:"transparent",color:"#64748b",fontSize:18,cursor:"pointer"}}>×</button>
+      )}
+      {open&&matches.length>0&&(
+        <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:20,background:"#1e293b",border:"1.5px solid #475569",borderRadius:10,boxShadow:"0 10px 30px rgba(0,0,0,0.5)",maxHeight:264,overflowY:"auto"}}>
+          {matches.map(n=>(
+            <button key={n} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{onChange(n);setOpen(false);}}
+              style={{display:"block",width:"100%",minHeight:44,padding:"10px 14px",textAlign:"left",border:"none",borderBottom:"1px solid #334155",background:"transparent",color:"#f1f5f9",fontFamily:"inherit",fontSize:15,cursor:"pointer"}}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── การ์ดลงชื่อผู้ปฏิบัติงานเวรนี้ (กรอกโดย Para/ENP/RN) ── */
+function RosterCard({selYear,selMonth,selDay,selShift}){
+  const key=rosterKey(selYear,selMonth,selDay,selShift);
+  const [form,setForm]=useState({}); const [exists,setExists]=useState(false);
+  const [all,setAll]=useState({}); const [checks,setChecks]=useState({});
+  const [open,setOpen]=useState(true);
+  const [saving,setSaving]=useState(false); const [saved,setSaved]=useState(false);
+  const [err,setErr]=useState(""); const [copied,setCopied]=useState(false);
+
+  // ประวัติทั้งหมด (ใช้ทำรายชื่อแนะนำ + ทะเบียนรถล่าสุด)
+  useEffect(()=>{const u=onValue(ref(db,"roster"),s=>setAll(s.val()||{}));return()=>u();},[]);
+  // ชื่อจากประวัติการเช็คอุปกรณ์ ใช้เป็นรายชื่อแนะนำ
+  const [checkNames,setCheckNames]=useState({para:[],aemt:[],driv:[]});
+  useEffect(()=>{
+    const u=onValue(ref(db,"records"),s=>{
+      const out={para:new Set(),aemt:new Set(),driv:new Set()};
+      const visit=v=>{
+        if(!v||typeof v!=="object") return;
+        if(typeof v.name==="string"&&out[v.roleId]){if(v.name.trim()) out[v.roleId].add(v.name.trim());return;}
+        Object.values(v).forEach(visit); // พขร. บ่าย/ดึก ถูกเก็บซ้อนอีกชั้น
+      };
+      Object.values(s.val()||{}).forEach(visit);
+      setCheckNames({para:[...out.para],aemt:[...out.aemt],driv:[...out.driv]});
+    });
+    return()=>u();
+  },[]);
+
+  // ข้อมูลเวรที่เลือก
+  useEffect(()=>{
+    setForm({});setExists(false);setSaved(false);setErr("");setCopied(false);
+    const u=onValue(ref(db,`roster/${key}`),s=>{
+      const v=s.val();
+      if(v){setExists(true);setForm(v);setOpen(false);} else {setExists(false);setOpen(true);}
+    });
+    return()=>u();
+  },[key]);
+
+  // ผลเช็คของเวรนี้ (สำหรับบรรทัด ✅/❌ ในรายงาน)
+  useEffect(()=>{
+    setChecks({});
+    const paths={
+      para:`records/${recKey(selYear,selMonth,selDay,selShift,"para")}`,
+      aemt:`records/${recKey(selYear,selMonth,selDay,selShift,"aemt")}`,
+      driv:drivPath(selYear,selMonth,selDay,selShift),
+    };
+    const us=Object.entries(paths).map(([id,p])=>onValue(ref(db,p),s=>setChecks(c=>({...c,[id]:s.val()}))));
+    return()=>us.forEach(u=>u());
+  },[key]);
+
+  // ยังไม่เคยลงเวรนี้ → เติมให้ก่อนจากชื่อคนที่เช็คแล้ว และทะเบียนรถล่าสุด
+  const lastVehicle=Object.keys(all).sort().reverse().map(k=>all[k]?.vehicle).find(Boolean)||"";
+  useEffect(()=>{
+    if(exists) return;
+    setForm(f=>({...f,
+      aemt:f.aemt||checks.aemt?.name||"",
+      driv:f.driv||checks.driv?.name||"",
+      vehicle:f.vehicle||lastVehicle,
+    }));
+  },[exists,checks.aemt,checks.driv,lastVehicle]);
+
+  const fields=rosterFieldsFor(selShift);
+  // ไม้ A / A1 / A2 / ไม้ 9 ใช้รายชื่อแนะนำชุดเดียวกัน
+  const NURSE=["p9","a","a1","a2"];
+  const pool=ids=>[...new Set(Object.values(all).flatMap(r=>ids.map(i=>r&&r[i])).filter(Boolean))].sort();
+  const merge=(...lists)=>[...new Set(lists.flat().filter(Boolean))].sort((x,y)=>x.localeCompare(y,"th"));
+  const suggestions={
+    ep:merge(pool(["ep"])),
+    p9:merge(pool(NURSE),checkNames.para), a:merge(pool(NURSE),checkNames.para),
+    a1:merge(pool(NURSE),checkNames.para), a2:merge(pool(NURSE),checkNames.para),
+    aemt:merge(pool(["aemt"]),checkNames.aemt),
+    driv:merge(pool(["driv"]),checkNames.driv),
+    vehicle:merge(pool(["vehicle"])),
+  };
+
+  function setField(id,v){setForm(p=>({...p,[id]:v}));setSaved(false);setCopied(false);}
+
+  async function handleSave(){
+    setSaving(true);setErr("");
+    try{
+      const data={};
+      fields.forEach(f=>data[f.id]=(form[f.id]||"").trim());
+      data.savedAt=new Date().toISOString();
+      await set(ref(db,`roster/${key}`),data);
+      setSaved(true);
+    }catch(e){setErr("บันทึกไม่สำเร็จ: "+(e.message||e));}
+    setSaving(false);
+  }
+
+  const report=buildShiftReport(selYear,selMonth,selDay,selShift,form,checks);
+
+  return(
+    <Card style={{border:"1.5px solid #f59e0b55"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
+        <span style={{fontSize:24}}>👥</span>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:15,color:"#fbbf24"}}>ผู้ปฏิบัติงานเวรนี้</div>
+          <div style={{fontSize:12,color:exists?"#4ade80":"#f87171"}}>{exists?"✓ ลงชื่อแล้ว — แตะเพื่อดู/แก้ไข":"ยังไม่ได้ลงชื่อ กรุณากรอกทุกเวร"}</div>
+        </div>
+        <span style={{fontSize:12,color:"#64748b"}}>{open?"▲":"▼"}</span>
+      </div>
+
+      {open&&(
+        <div style={{marginTop:14}}>
+          {selShift==="ดึก"&&<div style={{fontSize:12,color:"#c4b5fd",marginBottom:10}}>🌙 เวรดึก (00:15–08:14) นับเป็นของวันก่อนหน้า · ใช้ไม้ A1 / ไม้ A2</div>}
+          {fields.map(f=>(
+            <div key={f.id} style={{marginBottom:10}}>
+              <div style={{fontSize:12,color:"#94a3b8",marginBottom:4}}>{f.label}</div>
+              <NameInput value={form[f.id]||""} onChange={v=>setField(f.id,v)} options={suggestions[f.id]}
+                placeholder={f.id==="vehicle"?"เช่น กษ 1139 นครศรีธรรมราช":"พิมพ์ชื่อ แล้วเลือกจากรายการ"}/>
+            </div>
+          ))}
+          {err&&<div style={{fontSize:12,color:"#f87171",marginBottom:8}}>⚠️ {err}</div>}
+          <button onClick={handleSave} disabled={saving} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:800,background:saved?"#16a34a":saving?"#475569":"#d97706",color:"#fff"}}>
+            {saving?"⏳ กำลังบันทึก...":saved?"✅ บันทึกรายชื่อแล้ว":"💾 บันทึกรายชื่อผู้ปฏิบัติงาน"}
+          </button>
+        </div>
+      )}
+
+      {(exists||saved)&&(
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:8}}>📣 ข้อความรายงานเวร (สถานะเช็คอัปเดตอัตโนมัติ)</div>
+          <div style={{background:"#0f172a",borderRadius:8,padding:14,fontSize:13,lineHeight:1.8,color:"#e2e8f0",whiteSpace:"pre-wrap",marginBottom:10}}>{report}</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>copyToClipboard(report).then(()=>setCopied(true))} style={{flex:1,padding:"10px 0",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,background:"#3b82f6",color:"#fff"}}>
+              {copied?"✓ คัดลอกแล้ว":"📋 คัดลอกข้อความ"}
+            </button>
+            <a href={lineShareUrl(report)} target="_blank" rel="noopener noreferrer" style={{flex:1,padding:"10px 0",borderRadius:8,textAlign:"center",textDecoration:"none",fontSize:13,fontWeight:700,background:"#06c755",color:"#fff"}}>
+              ส่งไป LINE
+            </a>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function ParaCheckPage({selYear,selMonth,selDay,selShift}){
   const role=ROLE_MAP["para"]; const shiftMeta=SHIFT_META[selShift];
   const key=recKey(selYear,selMonth,selDay,selShift,"para");
@@ -304,6 +534,9 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
         </div>
         <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
       </Card>
+
+      {/* ผู้ปฏิบัติงานเวรนี้ */}
+      <RosterCard selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>
 
       {/* overall progress */}
       <Card style={{paddingBottom:16}}>
@@ -896,6 +1129,15 @@ function CheckPage({myRole,selYear,selMonth,selDay,selShift,equipment}){
 function SummaryPage({selYear,selMonth,equipment,onLock}){
   const [allData,setAllData]=useState({}); const [loading,setLoading]=useState(true);
   const [expandedRow,setExpandedRow]=useState(null);
+  const [roster,setRoster]=useState({});
+  useEffect(()=>{
+    const pre=`${selYear}-${String(selMonth+1).padStart(2,"0")}`;
+    const u=onValue(ref(db,"roster"),snap=>{
+      const raw=snap.val()||{};
+      setRoster(Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(pre))));
+    });
+    return()=>u();
+  },[selYear,selMonth]);
   useEffect(()=>{
     setLoading(true);
     const u=onValue(ref(db,"records"),snap=>{
@@ -918,18 +1160,22 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
   for(let d=1;d<=days;d++){
     for(const shift of SHIFTS){
       const roleResults=ROLES.map(r=>{
-        const k=recKey(selYear,selMonth,d,shift,r.id); const e=allData[k];
+        const e=getEntry(allData,selYear,selMonth,d,shift,r.id);
         return{role:r,entry:e,done:getDone(e),total:getTotal(r.id)};
       });
+      const ros=roster[rosterKey(selYear,selMonth,d,shift)];
       const allOK=roleResults.every(r=>r.entry&&r.entry.name&&r.done===r.total&&r.total>0);
-      if(!allOK) rows.push({day:d,shift,roleResults});
+      if(!allOK) rows.push({day:d,shift,roleResults,ros});
     }
   }
 
   const copyText="สรุปเวรที่ไม่ได้เช็คอุปกรณ์ EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)+"\n"+"─".repeat(36)+"\n"+
-    rows.map(({day,shift,roleResults})=>{
+    rows.map(({day,shift,roleResults,ros})=>{
       const missing=roleResults.filter(r=>!r.entry||!r.entry.name||r.done<r.total);
-      return "• "+day+" "+MONTH_NAMES[selMonth]+" เวร"+shift+"\n"+missing.map(r=>"  - "+r.role.short+": "+(r.entry?.name||"ไม่มีชื่อ")+" ["+r.done+"/"+r.total+"]").join("\n");
+      return "• "+day+" "+MONTH_NAMES[selMonth]+" เวร"+shift+"\n"+missing.map(r=>{
+        const who=r.entry?.name?r.entry.name:("ไม่ได้เช็ค — ผู้อยู่เวร: "+(dutyName(ros,r.role.id,shift)||"ไม่ได้ลงชื่อเวร"));
+        return "  - "+r.role.short+": "+who+" ["+r.done+"/"+r.total+"]";
+      }).join("\n");
     }).join("\n")+"\n"+"─".repeat(36)+"\nรวม "+rows.length+" เวร";
 
   if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
@@ -954,7 +1200,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
           <div style={{background:"rgba(239,68,68,0.1)",border:"1.5px solid #ef444455",borderRadius:10,padding:"12px 16px",marginBottom:14,fontSize:14}}>
             ⚠️ พบ <strong>{rows.length}</strong> เวร ที่ยังไม่สมบูรณ์
           </div>
-          {rows.map(({day,shift,roleResults},idx)=>{
+          {rows.map(({day,shift,roleResults,ros},idx)=>{
             const sm=SHIFT_META[shift];
             const rowKey=`${day}_${shift}`;
             const isExp=expandedRow===rowKey;
@@ -986,6 +1232,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
                             <div style={{flex:1}}>
                               <div style={{fontSize:13,fontWeight:700,color:r.role.color}}>{r.role.short}</div>
                               <div style={{fontSize:12,color:"#94a3b8"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
+                              {!r.entry?.name&&<div style={{fontSize:12,color:"#fbbf24",marginTop:2}}>👤 ผู้อยู่เวร: {dutyName(ros,r.role.id,shift)||"ไม่ได้ลงชื่อเวร"}</div>}
                             </div>
                             <div style={{fontSize:12,color:ok?"#4ade80":"#f87171",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
                           </div>
@@ -1016,6 +1263,123 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
           </Card>
         </>
       )}
+    </div>
+  );
+}
+
+/* ── รายชื่อเวรย้อนหลัง / ภาพรวม ── */
+function RosterHistoryPage({selYear,selMonth,onLock}){
+  const [roster,setRoster]=useState({}); const [allData,setAllData]=useState({});
+  const [loading,setLoading]=useState(true); const [filter,setFilter]=useState("all");
+  const [openKey,setOpenKey]=useState(null); const [copied,setCopied]=useState("");
+  const pre=`${selYear}-${String(selMonth+1).padStart(2,"0")}`;
+
+  useEffect(()=>{
+    setLoading(true);
+    const pick=raw=>Object.fromEntries(Object.entries(raw||{}).filter(([k])=>k.startsWith(pre)));
+    const u1=onValue(ref(db,"roster"),s=>setRoster(pick(s.val())));
+    const u2=onValue(ref(db,"records"),s=>{setAllData(pick(s.val()));setLoading(false);});
+    return()=>{u1();u2();};
+  },[pre]);
+
+  const rows=[];
+  for(let d=getDays(selYear,selMonth);d>=1;d--){
+    if(isFutureDate(selYear,selMonth,d)) continue;
+    for(const shift of [...SHIFTS].reverse()){
+      const key=rosterKey(selYear,selMonth,d,shift);
+      const ros=roster[key];
+      const checks={};
+      ROLES.forEach(r=>checks[r.id]=getEntry(allData,selYear,selMonth,d,shift,r.id));
+      const okAll=ROLES.every(r=>entryOK(checks[r.id],r.id));
+      rows.push({d,shift,key,ros,checks,okAll});
+    }
+  }
+  const shown=rows.filter(r=>filter==="all"||(filter==="missing"&&!r.okAll)||(filter==="noroster"&&!r.ros));
+  const rosterCount=rows.filter(r=>r.ros).length;
+  const okCount=rows.filter(r=>r.okAll).length;
+
+  const short=(r,roleId)=>entryOK(r.checks[roleId],roleId)?"✅":r.checks[roleId]?"⚠️":"❌";
+  const monthText="👥 รายชื่อผู้ปฏิบัติงาน EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)+"\n"+"─".repeat(30)+"\n"+
+    [...shown].reverse().map(r=>{
+      const o=r.ros||{};
+      return `• ${r.d} ${MONTH_NAMES[selMonth].slice(0,3)} เวร${r.shift}`+
+        (r.ros?"\n  "+rosterFieldsFor(r.shift).map(f=>`${f.label}: ${o[f.id]||"-"}`).join(" | "):"\n  (ไม่ได้ลงชื่อเวร)")+
+        `\n  เช็ค: Para/ENP/RN ${short(r,"para")} A-EMT ${short(r,"aemt")} พขร. ${short(r,"driv")}`;
+    }).join("\n")+"\n"+"─".repeat(30)+`\nลงชื่อเวร ${rosterCount}/${rows.length} · เช็คครบ ${okCount}/${rows.length} เวร`;
+
+  function exportCsv(){
+    const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+    const st=(r,id)=>entryOK(r.checks[id],id)?"ครบ":r.checks[id]?`${entryDone(r.checks[id])}/${roleTotal(id)}`:"ไม่เช็ค";
+    const head=["วันที่","เวร",...ROSTER_ALL.map(f=>f.label),"Para/ENP/RN เช็ค","ผู้เช็ค Para/ENP/RN","A-EMT เช็ค","ผู้เช็ค A-EMT","พขร. เช็ค","ผู้เช็ค พขร."];
+    const lines=[head,...[...rows].reverse().map(r=>{const o=r.ros||{};return[
+      `${r.d} ${MONTH_NAMES[selMonth]} ${selYear+543}`,r.shift,...ROSTER_ALL.map(f=>o[f.id]),
+      st(r,"para"),r.checks.para?.name,st(r,"aemt"),r.checks.aemt?.name,st(r,"driv"),r.checks.driv?.name];})];
+    const csv="﻿"+lines.map(l=>l.map(esc).join(",")).join("\r\n");
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    a.download=`รายชื่อเวร_EMS_${pre}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700};
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"#64748b"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
+  return(
+    <div>
+      <Card>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>{"👥 รายชื่อเวร "+MONTH_NAMES[selMonth]+" "+(selYear+543)}</div>
+            <div style={{fontSize:13,color:"#94a3b8"}}>ลงชื่อเวร {rosterCount}/{rows.length} · เช็คครบ {okCount}/{rows.length} เวร</div>
+          </div>
+          <button onClick={onLock} style={{...BTN,background:"rgba(251,191,36,0.15)",color:"#fbbf24"}}>🔒 ล็อค</button>
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
+          {[["all","ทั้งหมด"],["missing","เช็คไม่ครบ"],["noroster","ไม่ได้ลงชื่อเวร"]].map(([id,l])=>(
+            <button key={id} onClick={()=>setFilter(id)} style={{...BTN,background:filter===id?"#f59e0b":"rgba(255,255,255,0.07)",color:filter===id?"#fff":"#94a3b8"}}>{l}</button>
+          ))}
+        </div>
+      </Card>
+
+      {shown.length===0&&<div style={{textAlign:"center",padding:30,color:"#64748b"}}>ไม่มีรายการ</div>}
+      {shown.map(r=>{
+        const sm=SHIFT_META[r.shift]; const o=r.ros||{}; const isOpen=openKey===r.key;
+        return(
+          <div key={r.key} style={{marginBottom:8,background:"rgba(255,255,255,0.05)",borderRadius:12,border:"1px solid "+(r.okAll?"rgba(255,255,255,0.08)":"#ef444444"),overflow:"hidden"}}>
+            <div onClick={()=>setOpenKey(isOpen?null:r.key)} style={{padding:"12px 14px",cursor:"pointer",userSelect:"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{padding:"3px 10px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.accent+"22",color:sm.accent}}>{sm.icon} {r.d} {MONTH_NAMES[selMonth].slice(0,3)} · เวร{r.shift}</span>
+                <span style={{marginLeft:"auto",fontSize:12,color:"#94a3b8"}}>Para {short(r,"para")} · A-EMT {short(r,"aemt")} · พขร. {short(r,"driv")}</span>
+              </div>
+              {r.ros?(
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"2px 10px",fontSize:13,marginTop:8}}>
+                  {rosterFieldsFor(r.shift).map(f=>[
+                    <span key={f.id+"l"} style={{color:"#64748b"}}>{f.label}</span>,
+                    <span key={f.id+"v"} style={{color:"#e2e8f0"}}>{o[f.id]||"-"}</span>
+                  ])}
+                </div>
+              ):(
+                <div style={{fontSize:13,color:"#f87171",marginTop:8}}>⚠️ ไม่ได้ลงชื่อผู้ปฏิบัติงานเวรนี้</div>
+              )}
+            </div>
+            {isOpen&&(()=>{
+              const rep=buildShiftReport(selYear,selMonth,r.d,r.shift,r.ros,r.checks);
+              return(
+                <div style={{padding:"0 14px 14px"}}>
+                  <div style={{background:"#0f172a",borderRadius:8,padding:12,fontSize:12,lineHeight:1.8,color:"#e2e8f0",whiteSpace:"pre-wrap",marginBottom:8}}>{rep}</div>
+                  <button onClick={()=>copyToClipboard(rep).then(()=>setCopied(r.key))} style={{...BTN,background:"#3b82f6",color:"#fff"}}>{copied===r.key?"✓ คัดลอกแล้ว":"📋 คัดลอกรายงานเวรนี้"}</button>
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })}
+
+      <Card>
+        <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",marginBottom:10}}>📤 สรุปทั้งเดือน (ตามตัวกรองที่เลือก)</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={()=>copyToClipboard(monthText).then(()=>setCopied("month"))} style={{...BTN,background:"#3b82f6",color:"#fff"}}>{copied==="month"?"✓ คัดลอกแล้ว":"📋 คัดลอกข้อความสรุป"}</button>
+          <button onClick={exportCsv} style={{...BTN,background:"#16a34a",color:"#fff"}}>📊 ดาวน์โหลด Excel (CSV)</button>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -1379,12 +1743,13 @@ export default function App(){
   function handleLock(){setPinUnlocked(false);ss(PIN_SESSION_KEY,0);setView("check");}
 
   if(!myRole) return <RoleSelectScreen onSelect={selectRole}/>;
-  if((view==="dashboard"||view==="summary"||view==="settings")&&!pinUnlocked) return <PinLockScreen onUnlock={handleUnlock}/>;
+  if((view==="dashboard"||view==="summary"||view==="roster"||view==="settings")&&!pinUnlocked) return <PinLockScreen onUnlock={handleUnlock}/>;
 
   const role=ROLE_MAP[myRole];
   const TABS=[
     {id:"check",     label:"📋 บันทึก"},
     {id:"summary",   label:"📋 สรุป 🔒"},
+    {id:"roster",    label:"👥 รายชื่อเวร 🔒"},
     {id:"dashboard", label:"📊 Dashboard 🔒"},
     {id:"settings",  label:"⚙️ ตั้งค่า 🔒"},
   ];
@@ -1451,6 +1816,7 @@ export default function App(){
         {view==="check"&&myRole==="aemt"&&<AemtCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
         {view==="check"&&myRole==="driv"&&<DrivCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
         {view==="summary"  &&<SummaryPage   selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
+        {view==="roster"   &&<RosterHistoryPage selYear={selYear} selMonth={selMonth} onLock={handleLock}/>}
         {view==="dashboard"&&<DashboardPage selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="settings" &&<SettingsPage  myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
       </div>
