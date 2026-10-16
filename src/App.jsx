@@ -252,6 +252,7 @@ let EXPIRY_GROUPS=[
   {id:"other",label:"อื่น ๆ",icon:"🩹",items:[
     {id:"nss_irrigation",label:"NSS irrigation 1,000 ml"},
     {id:"alcohol_wound",label:"Alcohol ล้างแผล"},
+    {id:"iodine",label:"Iodine"},
     {id:"delivery_set",label:"Set คลอด"},
   ]},
 ];
@@ -268,6 +269,12 @@ function expDaysLeft(iso){
   const t=getThaiNow(); const today=new Date(t.getFullYear(),t.getMonth(),t.getDate());
   return Math.round((new Date(y,m-1,d)-today)/86400000);
 }
+// สถานะจากข้อมูลทั้งก้อน: ของที่ยังไม่เปิด (sealed) ยังไม่มีวันหมดอายุ ไม่ต้องเตือน
+function recStatus(rec){
+  if(rec&&rec.sealed) return {key:"sealed",days:null,color:"#5d7290",bg:"#eef2f7",text:"🔒 ยังไม่เปิด"};
+  return expStatus(rec?.date);
+}
+function addDaysISO(n){const t=getThaiNow();const d=new Date(t.getFullYear(),t.getMonth(),t.getDate()+Number(n||0));return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function expStatus(iso){
   const d=expDaysLeft(iso);
   if(d===null) return {key:"none",days:null,color:"#7f93ab",bg:"#f1f6fc",text:"ยังไม่ระบุ"};
@@ -288,7 +295,7 @@ function useExpiry(){
 }
 // รายการที่ต้องแจ้งเตือน (หมดแล้ว / ใกล้หมด) เรียงจากใกล้สุด
 function expiryAlerts(exp){
-  return EXPIRY_ITEMS.map(i=>({...i,date:exp[i.id]?.date||"",st:expStatus(exp[i.id]?.date)}))
+  return EXPIRY_ITEMS.map(i=>({...i,date:exp[i.id]?.date||"",st:recStatus(exp[i.id])}))
     .filter(x=>x.st.key==="expired"||x.st.key==="soon")
     .sort((a,b)=>a.st.days-b.st.days);
 }
@@ -1891,7 +1898,7 @@ function StartupAlert({onGoExpiry,onGoCheck}){
 function ExpiryBanner({onOpen}){
   const exp=useExpiry();
   const al=expiryAlerts(exp);
-  const missing=EXPIRY_ITEMS.filter(i=>!exp[i.id]?.date).length;
+  const missing=EXPIRY_ITEMS.filter(i=>!exp[i.id]?.date&&!exp[i.id]?.sealed).length;
   if(!al.length&&!missing) return null;
   const expired=al.filter(a=>a.st.key==="expired");
   const bad=expired.length>0;
@@ -1931,19 +1938,25 @@ function ExpiryPage(){
   const [editing,setEditing]=useState(null); const [draft,setDraft]=useState("");
   const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
   const names=[...new Set([...(staff.nurse||[]),...(staff.aemt||[]),...(staff.ep||[])])];
-  const rows=EXPIRY_ITEMS.map(i=>({...i,rec:exp[i.id]||null,st:expStatus(exp[i.id]?.date)}));
+  const rows=EXPIRY_ITEMS.map(i=>({...i,rec:exp[i.id]||null,st:recStatus(exp[i.id])}));
+  const [openDays,setOpenDays]=useState(30);
   const count=k=>rows.filter(r=>k==="alert"?(r.st.key==="expired"||r.st.key==="soon"):r.st.key===k).length;
   const show=r=>filter==="all"||(filter==="alert"&&(r.st.key==="expired"||r.st.key==="soon"))||(filter==="none"&&r.st.key==="none");
   const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
 
-  function startEdit(r){setEditing(r.id);setDraft(r.rec?.date||"");setMsg("");}
-  async function save(r){
+  function startEdit(r){setEditing(r.id);setDraft(r.rec?.date||"");setOpenDays(r.rec?.openDays||30);setMsg("");}
+  // mode: "date" = กรอกวันหมดอายุเอง, "open" = เปิดใช้วันนี้ (+N วัน), "sealed" = ยังไม่เปิด
+  async function save(r,mode="date"){
     if(!who.trim()){setMsg("⚠️ กรุณาใส่ชื่อผู้บันทึกด้านบนก่อน");return;}
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(draft)){setMsg("⚠️ กรุณาเลือกวันหมดอายุ");return;}
+    if(mode==="date"&&!/^\d{4}-\d{2}-\d{2}$/.test(draft)){setMsg("⚠️ กรุณาเลือกวันหมดอายุ");return;}
+    const nDays=Math.max(1,Math.min(3650,parseInt(openDays,10)||0));
+    if(mode==="open"&&!parseInt(openDays,10)){setMsg("⚠️ กรุณาใส่จำนวนวันหลังเปิด");return;}
     setBusy(true);setMsg("");
     try{
       const at=new Date().toISOString();
-      const rec={date:draft,by:who.trim(),at};
+      const rec=mode==="sealed"?{date:"",sealed:true,by:who.trim(),at}
+        :mode==="open"?{date:addDaysISO(nDays),openedAt:addDaysISO(0),openDays:nDays,by:who.trim(),at}
+        :{date:draft,by:who.trim(),at,...(r.rec?.openDays?{openDays:r.rec.openDays}:{})};
       await set(ref(db,`expiry/${r.id}`),rec);
       await set(ref(db,`expiryLog/${r.id}/${Date.now()}`),{...rec,prev:r.rec?.date||""}).catch(()=>{});
       ss(KEY_EXP_NAME,who.trim());
@@ -1957,7 +1970,7 @@ function ExpiryPage(){
       <Card>
         <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>⏰ วันหมดอายุ</div>
         <div style={{fontSize:13,color:"#5d7290",marginBottom:12,lineHeight:1.6}}>
-          กรอกวันหมดอายุเฉพาะตอน<strong>ใช้ไปแล้วเติมของใหม่</strong>เท่านั้น ระบบจะเตือนเองเมื่อเหลือ ≤ {EXP_WARN_DAYS} วัน
+          กรอกเฉพาะตอน<strong>ใช้ไปแล้วเติมของใหม่</strong> หรือ<strong>เพิ่งเปิดใช้</strong> ของที่ยังไม่เปิด (เช่น น้ำเกลือ Iodine Alcohol) กด 🔒 ยังไม่เปิด ได้ ระบบจะเตือนเองเมื่อเหลือ ≤ {EXP_WARN_DAYS} วัน
         </div>
         <div style={{fontSize:12,color:"#5d7290",marginBottom:4}}>ชื่อผู้บันทึก</div>
         <NameInput value={who} onChange={setWho} options={names} placeholder="พิมพ์ชื่อของคุณ"/>
@@ -1985,7 +1998,7 @@ function ExpiryPage(){
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:600}}>{r.label}</div>
                     <div style={{fontSize:12,color:"#7f93ab"}}>
-                      {r.rec?.date?`Exp ${thaiShortDate(r.rec.date)}`:"ยังไม่ระบุวันหมดอายุ"}
+                      {r.rec?.sealed?"ยังไม่เปิดใช้ ยังไม่มีวันหมดอายุ":r.rec?.date?`Exp ${thaiShortDate(r.rec.date)}${r.rec.openedAt?` · เปิด ${thaiShortDate(r.rec.openedAt)}`:""}`:"ยังไม่ระบุวันหมดอายุ"}
                       {r.rec?.by?` · ${r.rec.by}`:""}
                     </div>
                   </div>
@@ -1995,10 +2008,27 @@ function ExpiryPage(){
                   )}
                 </div>
                 {editing===r.id&&(
-                  <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                    <input type="date" value={draft} onChange={e=>setDraft(e.target.value)} style={{...BASE_INP,width:"auto",flex:"1 1 160px",fontSize:16}}/>
-                    <button type="button" disabled={busy} onClick={()=>save(r)} style={{...BTN,background:"#4a86e8",color:"#fff"}}>{busy?"⏳":"บันทึก"}</button>
-                    <button type="button" onClick={()=>setEditing(null)} style={{...BTN,background:"#f1f6fc",color:"#5d7290"}}>ยกเลิก</button>
+                  <div style={{marginTop:8,background:"#f6faff",border:"1px solid #e3edf8",borderRadius:10,padding:10,display:"flex",flexDirection:"column",gap:10}}>
+                    <div>
+                      <div style={{fontSize:12,color:"#5d7290",marginBottom:4}}>📅 มีวันหมดอายุบนฉลาก</div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <input type="date" value={draft} onChange={e=>setDraft(e.target.value)} aria-label="วันหมดอายุ" style={{...BASE_INP,width:"auto",flex:"1 1 160px",fontSize:16}}/>
+                        <button type="button" disabled={busy} onClick={()=>save(r,"date")} style={{...BTN,background:"#4a86e8",color:"#fff"}}>{busy?"⏳":"บันทึก"}</button>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:12,color:"#5d7290",marginBottom:4}}>🔓 เปิดใช้วันนี้ (นับวันหมดอายุหลังเปิด)</div>
+                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:13}}>ใช้ได้</span>
+                        <input type="number" inputMode="numeric" min="1" value={openDays} onChange={e=>setOpenDays(e.target.value)} aria-label="จำนวนวันหลังเปิด" style={{...BASE_INP,width:80,fontSize:16,textAlign:"center"}}/>
+                        <span style={{fontSize:13}}>วัน → หมด {thaiShortDate(addDaysISO(parseInt(openDays,10)||0))}</span>
+                        <button type="button" disabled={busy} onClick={()=>save(r,"open")} style={{...BTN,background:"#22a37f",color:"#fff"}}>เปิดใช้วันนี้</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <button type="button" disabled={busy} onClick={()=>save(r,"sealed")} style={{...BTN,background:"#eef2f7",color:"#3b4f69"}}>🔒 ยังไม่เปิด (ไม่ต้องนับ)</button>
+                      <button type="button" onClick={()=>setEditing(null)} style={{...BTN,background:"transparent",color:"#5d7290",marginLeft:"auto"}}>ยกเลิก</button>
+                    </div>
                   </div>
                 )}
               </div>
