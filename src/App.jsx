@@ -215,7 +215,7 @@ function ettExpText(days){
 /* ── ทะเบียนวันหมดอายุ: กรอกครั้งเดียวต่อล็อต แล้วระบบเตือนเอง ── */
 const EXP_WARN_DAYS=10;
 const ETT_SIZES=["3","3.5","4","4.5","5","5.5","6","6.5","7","7.5","8"];
-const EXPIRY_GROUPS=[
+let EXPIRY_GROUPS=[
   {id:"airway",label:"Airway",icon:"🫁",items:[
     ...ETT_SIZES.flatMap(z=>(z==="7.5"||z==="8")
       ?[{id:`ett_${z.replace(".","_")}_1`,label:`ETT เบอร์ ${z} (ชิ้นที่ 1)`},{id:`ett_${z.replace(".","_")}_2`,label:`ETT เบอร์ ${z} (ชิ้นที่ 2)`}]
@@ -255,7 +255,13 @@ const EXPIRY_GROUPS=[
     {id:"delivery_set",label:"Set คลอด"},
   ]},
 ];
-const EXPIRY_ITEMS=EXPIRY_GROUPS.flatMap(g=>g.items.map(i=>({...i,group:g.id})));
+let EXPIRY_ITEMS=EXPIRY_GROUPS.flatMap(g=>g.items.map(i=>({...i,group:g.id})));
+const DEFAULT_EXPIRY={all:JSON.parse(JSON.stringify(EXPIRY_GROUPS))};
+// รายการที่ติดตามวันหมดอายุ แก้ได้ในแท็บตั้งค่า (expiryItems)
+function applyExpiryItems(data){
+  EXPIRY_GROUPS=normalizeChecklist(data)||JSON.parse(JSON.stringify(DEFAULT_EXPIRY.all));
+  EXPIRY_ITEMS=EXPIRY_GROUPS.flatMap(g=>g.items.map(i=>({...i,group:g.id})));
+}
 function expDaysLeft(iso){
   if(!iso||!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
   const [y,m,d]=iso.split("-").map(Number);
@@ -518,7 +524,7 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
   }
 
   const expiry=useExpiry();
-  const report=buildShiftReport(selYear,selMonth,selDay,selShift,form,checks,expiryReportLines(expiry));
+  const report=buildShiftReport(selYear,selMonth,selDay,selShift,form,checks,[...pendingReportLines(),...expiryReportLines(expiry)]);
 
   return(
     <Card style={{border:"1.5px solid #9fd3e6"}}>
@@ -675,6 +681,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
                   <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
                     <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
                     <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item.label}</span>
+                    <PendingTag itemId={item.id} label={item.label}/>
                     {ck&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
                   </label>
 
@@ -954,6 +961,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
                   <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
                     <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
                     <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item.label}</span>
+                    <PendingTag itemId={item.id} label={item.label}/>
                     {ck&&!item.hasO2&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
                   </label>
 
@@ -1105,6 +1113,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
                   <label style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:4,background:ck?"rgba(18,160,120,0.08)":"transparent",transition:"background 0.15s"}}>
                     <input type="checkbox" checked={ck} onChange={()=>toggle(item.id)} style={{width:18,height:18,accentColor:group.color,cursor:"pointer",flexShrink:0}}/>
                     <span style={{fontSize:14,color:ck?"#128a6a":"#3b4f69",flex:1}}>{item.label}</span>
+                    <PendingTag itemId={item.id} label={item.label}/>
                     {ck&&<span style={{color:"#128a6a",fontSize:13}}>✓</span>}
                   </label>
                   {item.hasExp&&ck&&(()=>{
@@ -1695,6 +1704,189 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
 }
 
 /* ── Settings ── */
+/* ── ของค้างส่งต่อเวร: ของขาด/ใช้แล้วรอเติม/กำลังล้าง ให้เวรถัดไปรู้และกดปิดเมื่อเติมแล้ว ── */
+const PENDING_STATUS=[
+  {id:"missing", label:"ขาด / ต้องเบิกเติม", icon:"📦"},
+  {id:"used",    label:"ใช้แล้ว รอเติม",     icon:"🔁"},
+  {id:"washing", label:"กำลังล้าง / ทำความสะอาด", icon:"🫧"},
+  {id:"repair",  label:"ชำรุด / ส่งซ่อม",    icon:"🔧"},
+  {id:"other",   label:"อื่น ๆ",             icon:"📝"},
+];
+const PSTAT=Object.fromEntries(PENDING_STATUS.map(x=>[x.id,x]));
+let PENDING_OPEN=[];
+function applyPending(v){
+  PENDING_OPEN=Object.entries(v||{}).map(([id,x])=>({id,...x})).filter(x=>x&&!x.resolved&&x.item)
+    .sort((a,b)=>String(a.at||"").localeCompare(String(b.at||"")));
+}
+function pendingFor(itemId,label){
+  const n=normName(label);
+  return PENDING_OPEN.filter(p=>(itemId&&p.itemId===itemId)||(!p.itemId&&normName(p.item)===n));
+}
+function pendingWhen(p){
+  if(!p.at) return "";
+  const d=new Date(p.at); const t=new Date(d.toLocaleString("en-US",{timeZone:"Asia/Bangkok"}));
+  return `${t.getDate()} ${MONTH_NAMES[t.getMonth()].slice(0,3)} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}${p.shift?` · เวร${p.shift}`:""}`;
+}
+function pendingReportLines(){
+  if(!PENDING_OPEN.length) return [];
+  return ["","📌 ของค้างส่งต่อเวร",...PENDING_OPEN.map(p=>`• ${p.item} — ${PSTAT[p.status]?.label||p.status}${p.note?` (${p.note})`:""} · แจ้งโดย ${p.by||"-"} ${pendingWhen(p)}`)];
+}
+// ป้ายเล็กข้างชื่ออุปกรณ์ในหน้าเช็ค
+function PendingTag({itemId,label}){
+  const ps=pendingFor(itemId,label);
+  if(!ps.length) return null;
+  const p=ps[0];
+  return <span title={`${PSTAT[p.status]?.label||""} · ${p.by||""}`} style={{fontSize:11,fontWeight:700,color:"#b4530f",background:"rgba(232,137,58,0.15)",padding:"3px 8px",borderRadius:99,whiteSpace:"nowrap",flexShrink:0}}>📌 {PSTAT[p.status]?.label.split(" /")[0]||"ค้าง"}</span>;
+}
+const KEY_PENDING_NAME="ems_pending_name";
+function allItemOptions(){
+  const labels=[...PARA_GROUPS,...AEMT_GROUPS,...DRIV_GROUPS].flatMap(g=>g.items.map(i=>i.label));
+  return [...new Set([...labels,...EXPIRY_ITEMS.map(i=>i.label)])];
+}
+function findItemId(label){
+  const n=normName(label);
+  for(const g of [...PARA_GROUPS,...AEMT_GROUPS,...DRIV_GROUPS]) for(const i of g.items) if(normName(i.label)===n) return i.id;
+  return "";
+}
+function PendingCard({roleId}){
+  const staff=useStaff();
+  const names=[...new Set(Object.values(staff).flat())];
+  const [open,setOpen]=useState(false);
+  const [item,setItem]=useState(""); const [status,setStatus]=useState("missing"); const [note,setNote]=useState("");
+  const [who,setWho]=useState(()=>ls(KEY_PENDING_NAME,""));
+  const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
+  const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
+  const list=PENDING_OPEN;
+
+  async function add(){
+    if(!item.trim()){setMsg("⚠️ กรุณาระบุอุปกรณ์");return;}
+    if(!who.trim()){setMsg("⚠️ กรุณาใส่ชื่อผู้แจ้ง");return;}
+    setBusy(true);setMsg("");
+    try{
+      const sd=getShiftAndDate();
+      await set(ref(db,`pending/${Date.now().toString(36)}`),{item:item.trim(),itemId:findItemId(item),status,note:note.trim(),by:who.trim(),role:roleId||"",shift:sd.shift,at:new Date().toISOString(),resolved:false});
+      ss(KEY_PENDING_NAME,who.trim());
+      setItem("");setNote("");setStatus("missing");setOpen(false);setMsg("✅ แจ้งแล้ว เวรถัดไปจะเห็นรายการนี้");
+    }catch(e){setMsg("⚠️ แจ้งไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+  async function resolve(p){
+    const name=window.prompt(`ใครเป็นคนเติม/แก้ “${p.item}”?`,ls(KEY_PENDING_NAME,"")||"");
+    if(name===null) return;
+    if(!name.trim()){setMsg("⚠️ กรุณาใส่ชื่อผู้เติม");return;}
+    try{
+      await set(ref(db,`pending/${p.id}`),{...Object.fromEntries(Object.entries(p).filter(([k])=>k!=="id")),resolved:true,resolvedBy:name.trim(),resolvedAt:new Date().toISOString()});
+      ss(KEY_PENDING_NAME,name.trim());setMsg(`✅ ปิดรายการ ${p.item} แล้ว`);
+    }catch(e){setMsg("⚠️ ไม่สำเร็จ: "+(e.message||e));}
+  }
+
+  return(
+    <div style={{background:list.length?"rgba(232,137,58,0.08)":"#ffffff",border:`1.5px solid ${list.length?"#e8893a66":"#e3edf8"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{flex:1,fontSize:14,fontWeight:800,color:list.length?"#b4530f":"#1f7f9a"}}>
+          📌 ของค้างส่งต่อเวร {list.length?`(${list.length})`:""}
+        </div>
+        <button type="button" onClick={()=>{setOpen(o=>!o);setMsg("");}} style={{...BTN,background:open?"#f1f6fc":"#4a86e8",color:open?"#5d7290":"#fff"}}>{open?"ยกเลิก":"＋ แจ้งของค้าง"}</button>
+      </div>
+      {!list.length&&!open&&<div style={{fontSize:12,color:"#5d7290",marginTop:4}}>ไม่มีของค้าง ✨</div>}
+
+      {list.map(p=>(
+        <div key={p.id} style={{display:"flex",gap:8,alignItems:"center",background:"#ffffff",border:"1px solid #f3d9c2",borderRadius:10,padding:"8px 10px",marginTop:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#1f3047"}}>{PSTAT[p.status]?.icon||"📌"} {p.item}</div>
+            <div style={{fontSize:12,color:"#b4530f",fontWeight:600}}>{PSTAT[p.status]?.label||p.status}{p.note?` · ${p.note}`:""}</div>
+            <div style={{fontSize:11,color:"#7f93ab"}}>แจ้งโดย {p.by||"-"} · {pendingWhen(p)}</div>
+          </div>
+          <button type="button" onClick={()=>resolve(p)} style={{...BTN,background:"#22a37f",color:"#fff",minHeight:40,flexShrink:0}}>✅ เติมแล้ว</button>
+        </div>
+      ))}
+
+      {open&&(
+        <div style={{marginTop:10,background:"#ffffff",borderRadius:10,padding:10,border:"1px solid #e3edf8"}}>
+          <div style={{fontSize:12,color:"#5d7290",marginBottom:4}}>อุปกรณ์</div>
+          <NameInput value={item} onChange={setItem} options={allItemOptions()} placeholder="พิมพ์ชื่ออุปกรณ์ เช่น Closed suction"/>
+          <div style={{fontSize:12,color:"#5d7290",margin:"10px 0 4px"}}>สถานะ</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {PENDING_STATUS.map(x=>(
+              <button key={x.id} type="button" onClick={()=>setStatus(x.id)} style={{...BTN,background:status===x.id?"#e8893a":"#f1f6fc",color:status===x.id?"#fff":"#5d7290"}}>{x.icon} {x.label}</button>
+            ))}
+          </div>
+          <div style={{fontSize:12,color:"#5d7290",margin:"10px 0 4px"}}>หมายเหตุ (ถ้ามี)</div>
+          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="เช่น เหลือ 1 ชิ้น, เบิกแล้วรอของ" style={{...BASE_INP,fontSize:16}}/>
+          <div style={{fontSize:12,color:"#5d7290",margin:"10px 0 4px"}}>ชื่อผู้แจ้ง</div>
+          <NameInput value={who} onChange={setWho} options={names} placeholder="พิมพ์ชื่อของคุณ"/>
+          <button type="button" disabled={busy} onClick={add} style={{...BTN,width:"100%",padding:"12px 0",marginTop:12,background:"#e8893a",color:"#fff",fontSize:14}}>{busy?"⏳ กำลังบันทึก...":"📌 แจ้งให้เวรถัดไปรู้"}</button>
+        </div>
+      )}
+      {msg&&<div style={{fontSize:13,marginTop:8,color:msg.startsWith("⚠️")?"#d6456f":"#128a6a"}}>{msg}</div>}
+    </div>
+  );
+}
+
+/* ── ป๊อปอัปแจ้งเตือนตอนเปิดแอป: ของหมดอายุ/ใกล้หมด + ของค้างส่งต่อเวร ── */
+const KEY_ALERT_SEEN="ems_alert_seen";
+function ssGet(k){try{return sessionStorage.getItem(k)||"";}catch{return "";}}
+function ssSet(k,v){try{sessionStorage.setItem(k,v);}catch{}}
+function StartupAlert({onGoExpiry,onGoCheck}){
+  const [exp,setExp]=useState(null);
+  const [pendingReady,setPendingReady]=useState(false);
+  const [closed,setClosed]=useState(false);
+  useEffect(()=>{const u=onValue(ref(db,"expiry"),s=>setExp(s.val()||{}));return()=>u();},[]);
+  useEffect(()=>{const u=onValue(ref(db,"pending"),()=>setPendingReady(true));return()=>u();},[]);
+  if(exp===null||!pendingReady||closed) return null;
+  const al=expiryAlerts(exp); const pend=PENDING_OPEN;
+  if(!al.length&&!pend.length) return null;
+  // จำไว้ว่ารับทราบแล้ว (ต่อเวร) — ถ้ามีรายการใหม่หรือขึ้นเวรใหม่จะเด้งอีก
+  const sd=getShiftAndDate();
+  const sig=`${sd.year}-${sd.month}-${sd.day}_${sd.shift}|`+[...al.map(a=>a.id+":"+a.st.key),...pend.map(p=>p.id)].sort().join(",");
+  if(ssGet(KEY_ALERT_SEEN)===sig) return null;
+  const close=go=>{ssSet(KEY_ALERT_SEEN,sig);setClosed(true);go&&go();};
+  const expired=al.filter(a=>a.st.key==="expired");
+  const BTN={padding:"12px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,flex:1};
+  return(
+    <div role="dialog" aria-modal="true" aria-label="แจ้งเตือน" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(20,35,60,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#ffffff",borderRadius:20,width:"100%",maxWidth:420,maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(20,35,60,0.3)",padding:"20px 18px"}}>
+        <div style={{textAlign:"center",fontSize:36,marginBottom:4}}>🔔</div>
+        <div style={{textAlign:"center",fontSize:18,fontWeight:800,color:"#1f3047",marginBottom:4}}>มีเรื่องต้องดูก่อนเริ่มเวร</div>
+        <div style={{textAlign:"center",fontSize:13,color:"#5d7290",marginBottom:14}}>
+          {[expired.length&&`หมดอายุ ${expired.length}`,al.length-expired.length&&`ใกล้หมดอายุ ${al.length-expired.length}`,pend.length&&`ของค้าง ${pend.length}`].filter(Boolean).join(" · ")} รายการ
+        </div>
+
+        {pend.length>0&&(
+          <div style={{background:"rgba(232,137,58,0.08)",border:"1px solid #f3d9c2",borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#b4530f",marginBottom:6}}>📌 ของค้างส่งต่อเวร</div>
+            {pend.map(p=>(
+              <div key={p.id} style={{fontSize:13,marginBottom:6}}>
+                <div style={{fontWeight:700,color:"#1f3047"}}>{PSTAT[p.status]?.icon||"📌"} {p.item}</div>
+                <div style={{color:"#b4530f"}}>{PSTAT[p.status]?.label||p.status}{p.note?` · ${p.note}`:""}</div>
+                <div style={{fontSize:11,color:"#7f93ab"}}>แจ้งโดย {p.by||"-"} · {pendingWhen(p)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {al.length>0&&(
+          <div style={{background:expired.length?"rgba(226,92,134,0.07)":"rgba(232,137,58,0.07)",border:`1px solid ${expired.length?"#f2c4d3":"#f3d9c2"}`,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:800,color:expired.length?"#d6456f":"#b4530f",marginBottom:6}}>⏰ วันหมดอายุ</div>
+            {al.map(a=>(
+              <div key={a.id} style={{display:"flex",gap:8,fontSize:13,marginBottom:4}}>
+                <span style={{flex:1,color:"#1f3047"}}>{a.st.key==="expired"?"🔴":"🟠"} {a.label}</span>
+                <span style={{color:a.st.color,fontWeight:700,whiteSpace:"nowrap"}}>{a.st.text}</span>
+              </div>
+            ))}
+            {expired.length>0&&<div style={{fontSize:12,color:"#d6456f",marginTop:6,fontWeight:600}}>🚨 ของที่หมดอายุแล้ว ห้ามใช้ กรุณาเบิกเปลี่ยน</div>}
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:8,marginTop:6}}>
+          {al.length>0&&<button type="button" onClick={()=>close(onGoExpiry)} style={{...BTN,background:"#e9f1fb",color:"#2f6fd6"}}>⏰ ดูวันหมดอายุ</button>}
+          <button type="button" autoFocus onClick={()=>close(onGoCheck)} style={{...BTN,background:"#4a86e8",color:"#fff"}}>รับทราบ 👍</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── ป้ายเตือนวันหมดอายุ (โชว์บนหน้าเช็คทุกตำแหน่ง) ── */
 function ExpiryBanner({onOpen}){
   const exp=useExpiry();
@@ -1819,15 +2011,17 @@ function ExpiryPage(){
 }
 
 /* ── แก้รายการอุปกรณ์ที่ต้องเช็ค (ในแท็บตั้งค่า, ล็อก PIN) ── */
-function ChecklistEditor({defaultRole}){
-  const [roleId,setRoleId]=useState(ROLE_MAP[defaultRole]?defaultRole:"para");
-  const [draft,setDraft]=useState(()=>clone(currentGroups(roleId)));
+function ChecklistEditor({defaultRole,listKey="checklists",tabs=ROLES,defaults=DEFAULT_CHECKLISTS,title="📋 รายการอุปกรณ์ที่ต้องเช็ค",desc="แก้ชื่อ เพิ่ม ลบ หรือสลับลำดับได้ แล้วกดบันทึก · เวรที่เช็คไปแล้วยังนับตามรายการเดิม"}){
+  const pick=(c,id)=>tabs?c[id]:(c&&Object.keys(c).length?c:null);
+  const pathOf=id=>tabs?`${listKey}/${id}`:listKey;
+  const [roleId,setRoleId]=useState(tabs?(ROLE_MAP[defaultRole]?defaultRole:"para"):"all");
+  const [draft,setDraft]=useState(()=>clone(defaults[roleId]));
   const [dirty,setDirty]=useState(false);
   const [busy,setBusy]=useState(false); const [msg,setMsg]=useState("");
   const [custom,setCustom]=useState({});
-  useEffect(()=>{const u=onValue(ref(db,"checklists"),s=>setCustom(s.val()||{}));return()=>u();},[]);
+  useEffect(()=>{const u=onValue(ref(db,listKey),s=>setCustom(s.val()||{}));return()=>u();},[]);
   // โหลดรายการใหม่เมื่อเปลี่ยนตำแหน่ง หรือมีคนอื่นบันทึก (ถ้ายังไม่ได้แก้ค้างไว้)
-  useEffect(()=>{if(!dirty) setDraft(clone(normalizeChecklist(custom[roleId])||DEFAULT_CHECKLISTS[roleId]));},[roleId,custom]);
+  useEffect(()=>{if(!dirty) setDraft(clone(normalizeChecklist(pick(custom,roleId))||defaults[roleId]));},[roleId,custom]);
 
   const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
   const SMALL={...BTN,padding:0,width:36,height:36,background:"#f1f6fc",color:"#5d7290",flexShrink:0};
@@ -1838,7 +2032,7 @@ function ChecklistEditor({defaultRole}){
   function switchRole(id){
     if(id===roleId) return;
     if(dirty&&!window.confirm("ยังไม่ได้บันทึกการแก้ไข ต้องการทิ้งแล้วเปลี่ยนตำแหน่งไหม?")) return;
-    setDirty(false);setRoleId(id);setDraft(clone(normalizeChecklist(custom[id])||DEFAULT_CHECKLISTS[id]));setMsg("");
+    setDirty(false);setRoleId(id);setDraft(clone(normalizeChecklist(pick(custom,id))||defaults[id]));setMsg("");
   }
   async function save(){
     const clean=normalizeChecklist(draft);
@@ -1846,24 +2040,24 @@ function ChecklistEditor({defaultRole}){
     const empty=draft.find(g=>g.items.some(i=>!String(i.label||"").trim()));
     if(empty&&!window.confirm("มีบางรายการที่ยังไม่ได้ใส่ชื่อ จะถูกตัดออก บันทึกต่อไหม?")) return;
     setBusy(true);
-    try{await set(ref(db,`checklists/${roleId}`),clean);setDirty(false);setMsg(`✅ บันทึกแล้ว · ${clean.reduce((s,g)=>s+g.items.length,0)} รายการ มีผลกับการเช็คครั้งถัดไป`);}
+    try{await set(ref(db,pathOf(roleId)),clean);setDirty(false);setMsg(`✅ บันทึกแล้ว · ${clean.reduce((s,g)=>s+g.items.length,0)} รายการ มีผลกับการเช็คครั้งถัดไป`);}
     catch(e){setMsg("⚠️ บันทึกไม่สำเร็จ: "+(e.message||e));}
     setBusy(false);
   }
   async function resetDefault(){
-    if(!window.confirm(`คืนค่ารายการของ ${ROLE_MAP[roleId].short} กลับเป็นค่าเริ่มต้น?`)) return;
+    if(!window.confirm(`คืนค่ารายการของ ${tabs?ROLE_MAP[roleId].short:"รายการนี้"} กลับเป็นค่าเริ่มต้น?`)) return;
     setBusy(true);
-    try{await remove(ref(db,`checklists/${roleId}`));setDirty(false);setDraft(clone(DEFAULT_CHECKLISTS[roleId]));setMsg("✅ คืนค่าเริ่มต้นแล้ว");}
+    try{await remove(ref(db,pathOf(roleId)));setDirty(false);setDraft(clone(defaults[roleId]));setMsg("✅ คืนค่าเริ่มต้นแล้ว");}
     catch(e){setMsg("⚠️ ไม่สำเร็จ: "+(e.message||e));}
     setBusy(false);
   }
 
   return(
     <Card style={{border:"1.5px solid #9fd3e6"}}>
-      <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a",marginBottom:4}}>📋 รายการอุปกรณ์ที่ต้องเช็ค</div>
-      <div style={{fontSize:12,color:"#5d7290",marginBottom:12}}>แก้ชื่อ เพิ่ม ลบ หรือสลับลำดับได้ แล้วกดบันทึก · เวรที่เช็คไปแล้วยังนับตามรายการเดิม</div>
+      <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a",marginBottom:4}}>{title}</div>
+      <div style={{fontSize:12,color:"#5d7290",marginBottom:12}}>{desc}</div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-        {ROLES.map(r=>(
+        {(tabs||[]).map(r=>(
           <button key={r.id} type="button" onClick={()=>switchRole(r.id)} style={{...BTN,background:roleId===r.id?"#2a9fb8":"#f1f6fc",color:roleId===r.id?"#fff":"#5d7290"}}>
             {r.icon} {r.short}{custom[r.id]?" ✎":""}
           </button>
@@ -1999,6 +2193,9 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
   return(
     <div>
       <ChecklistEditor defaultRole={myRole}/>
+      <ChecklistEditor listKey="expiryItems" tabs={null} defaults={DEFAULT_EXPIRY}
+        title="⏰ รายการที่ต้องติดตามวันหมดอายุ"
+        desc="เพิ่ม ลบ แก้ชื่อ หรือสลับลำดับได้ · แก้ชื่อแล้ววันหมดอายุที่กรอกไว้ยังอยู่ · ลบแล้วจะไม่เตือนรายการนั้นอีก"/>
 
       {myRole!=="para"&&myRole!=="aemt"&&myRole!=="driv"&&(
         <>
@@ -2127,6 +2324,8 @@ export default function App(){
   // รายการอุปกรณ์ที่แก้ในแอป
   const [,setChkVer]=useState(0);
   useEffect(()=>{const u=onValue(ref(db,"checklists"),snap=>{applyChecklists(snap.val());setChkVer(v=>v+1);});return()=>u();},[]);
+  useEffect(()=>{const u=onValue(ref(db,"expiryItems"),snap=>{applyExpiryItems(snap.val());setChkVer(v=>v+1);});return()=>u();},[]);
+  useEffect(()=>{const u=onValue(ref(db,"pending"),snap=>{applyPending(snap.val());setChkVer(v=>v+1);});return()=>u();},[]);
 
   function selectRole(id){setMyRole(id);ss(KEY_ROLE,id);}
   function switchRole(){setMyRole(null);ss(KEY_ROLE,null);setView("check");}
@@ -2204,6 +2403,8 @@ export default function App(){
             )}
           </div>
         )}
+        <StartupAlert onGoExpiry={()=>setView("expiry")} onGoCheck={()=>setView("check")}/>
+        {view==="check"&&<PendingCard roleId={myRole}/>}
         {view==="check"&&<ExpiryBanner onOpen={()=>setView("expiry")}/>}
         {view==="expiry"&&<ExpiryPage/>}
         {view==="check"&&myRole==="para"&&<ParaCheckPage selYear={selYear} selMonth={selMonth} selDay={selDay} selShift={selShift}/>}
