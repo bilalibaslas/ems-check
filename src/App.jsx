@@ -470,6 +470,48 @@ function NameInput({value,onChange,options,placeholder,onAdd}){
   );
 }
 
+/* ── เตือนก่อนบันทึก: ยังไม่ใส่ชื่อ / ยังเช็คไม่ครบ ── */
+function missingItems(groups,checked){
+  return groups.map(g=>({id:g.id,label:g.label,icon:g.icon,items:g.items.filter(i=>!checked[i.id]).map(i=>i.label)})).filter(g=>g.items.length);
+}
+function IncompleteModal({missing,nameMissing,onBack,onSaveAnyway}){
+  const count=(missing||[]).reduce((s,g)=>s+g.items.length,0);
+  const BTN={padding:"12px 0",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,flex:1};
+  return(
+    <div role="dialog" aria-modal="true" aria-label="ยังเช็คไม่ครบ" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(20,35,60,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#ffffff",borderRadius:20,width:"100%",maxWidth:420,maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(20,35,60,0.3)",padding:"20px 18px"}}>
+        <div style={{textAlign:"center",fontSize:34,marginBottom:4}}>⚠️</div>
+        <div style={{textAlign:"center",fontSize:18,fontWeight:800,color:"#1f3047",marginBottom:4}}>{nameMissing?"ยังบันทึกไม่ได้":"ยังเช็คไม่ครบ"}</div>
+        <div style={{textAlign:"center",fontSize:13,color:"#5d7290",marginBottom:14}}>
+          {nameMissing?"กรุณาใส่ชื่อผู้เช็คก่อนบันทึก":`เหลืออีก ${count} รายการที่ยังไม่ได้ติ๊ก`}
+        </div>
+        {nameMissing&&(
+          <div style={{background:"rgba(226,92,134,0.08)",border:"1px solid #f2c4d3",borderRadius:12,padding:"10px 12px",marginBottom:10,fontSize:14,fontWeight:700,color:"#d6456f"}}>✏️ ยังไม่ได้ใส่ชื่อ-นามสกุลผู้เช็ค</div>
+        )}
+        {count>0&&(
+          <div style={{background:"rgba(232,137,58,0.07)",border:"1px solid #f3d9c2",borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+            {missing.map(g=>(
+              <div key={g.id} style={{marginBottom:8}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#b4530f",marginBottom:2}}>{g.icon} {g.label} ({g.items.length})</div>
+                {g.items.map(l=><div key={l} style={{fontSize:13,color:"#1f3047",paddingLeft:8}}>• {l}</div>)}
+              </div>
+            ))}
+          </div>
+        )}
+        {!nameMissing&&count>0&&(
+          <div style={{fontSize:12,color:"#5d7290",marginBottom:10,lineHeight:1.6}}>
+            ของขาดจริง ใช้แล้วรอเติม หรือกำลังล้าง? บันทึกแบบไม่ครบได้ แล้วแจ้งใน <b>📌 ของค้างส่งต่อเวร</b> ให้เวรถัดไปรู้ด้วย
+          </div>
+        )}
+        <div style={{display:"flex",gap:8}}>
+          {!nameMissing&&count>0&&<button type="button" onClick={onSaveAnyway} style={{...BTN,background:"#f1f6fc",color:"#b4530f"}}>บันทึกแบบไม่ครบ</button>}
+          <button type="button" autoFocus onClick={onBack} style={{...BTN,background:"#4a86e8",color:"#fff"}}>กลับไปเช็คต่อ</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── การ์ดลงชื่อผู้ปฏิบัติงานเวรนี้ (กรอกโดย Para/ENP/RN) ── */
 function RosterCard({selYear,selMonth,selDay,selShift}){
   const key=rosterKey(selYear,selMonth,selDay,selShift);
@@ -587,7 +629,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
   const [note,setNote]=useState(""); const [expDates,setExpDates]=useState({});
   const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
-  const [noteError,setNoteError]=useState(false); const [showSuccess,setShowSuccess]=useState(false);
+  const [noteError,setNoteError]=useState(false); const [incomplete,setIncomplete]=useState(null); const [showSuccess,setShowSuccess]=useState(false);
 
   const totalItems=PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
   const doneItems=PARA_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -606,8 +648,12 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
 
   function toggle(id){setChecked(p=>({...p,[id]:!p[id]}));setSaved(false);}
 
-  async function handleSave(){
+  async function handleSave(force){
     if(!note.trim()){setNoteError(true);return;}
+    // เตือนก่อนบันทึก: ไม่มีชื่อ = บันทึกไม่ได้, เช็คไม่ครบ = ถามก่อน
+    if(!myName.trim()){setIncomplete({nameMissing:true,missing:missingItems(PARA_GROUPS,checked)});return;}
+    if(force!==true){const miss=missingItems(PARA_GROUPS,checked);if(miss.length){setIncomplete({nameMissing:false,missing:miss});return;}}
+    setIncomplete(null);
     setNoteError(false);setSaving(true);
     const paraTotal=PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
     const paraDone=PARA_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -623,6 +669,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
 
   return(
     <div>
+      {incomplete&&<IncompleteModal missing={incomplete.missing} nameMissing={incomplete.nameMissing} onBack={()=>setIncomplete(null)} onSaveAnyway={()=>handleSave(true)}/>}
       {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       {/* date badge */}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
@@ -876,7 +923,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   const [scratchNote,setScratchNote]=useState("");
   const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
-  const [noteError,setNoteError]=useState(false); const [showSuccess,setShowSuccess]=useState(false);
+  const [noteError,setNoteError]=useState(false); const [incomplete,setIncomplete]=useState(null); const [showSuccess,setShowSuccess]=useState(false);
 
   const totalItems=DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
   const doneItems=DRIV_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -896,8 +943,12 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   function toggle(id){setChecked(p=>({...p,[id]:!p[id]}));setSaved(false);}
   function setO2(id,val){setO2Levels(p=>({...p,[id]:val}));setSaved(false);}
 
-  async function handleSave(){
+  async function handleSave(force){
     if(!note.trim()){setNoteError(true);return;}
+    // เตือนก่อนบันทึก: ไม่มีชื่อ = บันทึกไม่ได้, เช็คไม่ครบ = ถามก่อน
+    if(!myName.trim()){setIncomplete({nameMissing:true,missing:missingItems(DRIV_GROUPS,checked)});return;}
+    if(force!==true){const miss=missingItems(DRIV_GROUPS,checked);if(miss.length){setIncomplete({nameMissing:false,missing:miss});return;}}
+    setIncomplete(null);
     setNoteError(false);setSaving(true);
     const drivTotal=DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
     const drivDone=DRIV_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -910,6 +961,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
 
   return(
     <div>
+      {incomplete&&<IncompleteModal missing={incomplete.missing} nameMissing={incomplete.nameMissing} onBack={()=>setIncomplete(null)} onSaveAnyway={()=>handleSave(true)}/>}
       {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
@@ -1034,7 +1086,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   const [note,setNote]=useState(""); const [expDates,setExpDates]=useState({});
   const [saved,setSaved]=useState(false); const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true); const [warn,setWarn]=useState(null);
-  const [noteError,setNoteError]=useState(false); const [showSuccess,setShowSuccess]=useState(false);
+  const [noteError,setNoteError]=useState(false); const [incomplete,setIncomplete]=useState(null); const [showSuccess,setShowSuccess]=useState(false);
 
   const totalItems=AEMT_GROUPS.reduce((s,g)=>s+g.items.length,0);
   const doneItems=AEMT_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
@@ -1054,8 +1106,12 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   function toggle(id){setChecked(p=>({...p,[id]:!p[id]}));setSaved(false);}
   function setExp(id,val){setExpDates(p=>({...p,[id]:val}));setSaved(false);}
 
-  async function handleSave(){
+  async function handleSave(force){
     if(!note.trim()){setNoteError(true);return;}
+    // เตือนก่อนบันทึก: ไม่มีชื่อ = บันทึกไม่ได้, เช็คไม่ครบ = ถามก่อน
+    if(!myName.trim()){setIncomplete({nameMissing:true,missing:missingItems(AEMT_GROUPS,checked)});return;}
+    if(force!==true){const miss=missingItems(AEMT_GROUPS,checked);if(miss.length){setIncomplete({nameMissing:false,missing:miss});return;}}
+    setIncomplete(null);
     setNoteError(false);setSaving(true);
     await set(dbRef,{name:myName,checked,note,expDates,roleId:"aemt",total:roleTotal("aemt"),savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
@@ -1066,6 +1122,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
 
   return(
     <div>
+      {incomplete&&<IncompleteModal missing={incomplete.missing} nameMissing={incomplete.nameMissing} onBack={()=>setIncomplete(null)} onSaveAnyway={()=>handleSave(true)}/>}
       {showSuccess&&<SuccessScreen myName={myName} role={role} selDay={selDay} selMonth={selMonth} selYear={selYear} selShift={selShift} totalItems={totalItems} note={note} savedAt={new Date().toISOString()} onClose={()=>setShowSuccess(false)}/>}
       <div style={{background:shiftMeta.accent+"20",border:`1.5px solid ${shiftMeta.accent}44`,borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:13,color:shiftMeta.accent}}>{shiftMeta.icon} {selDay} {MONTH_NAMES[selMonth]} {selYear+543} · เวร{selShift}</span>
