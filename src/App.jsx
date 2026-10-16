@@ -470,6 +470,12 @@ function NameInput({value,onChange,options,placeholder,onAdd}){
   );
 }
 
+/* ── ช่องชื่อผู้ตรวจเช็ค: พิมพ์แล้วเด้งรายชื่อจากแท็บตั้งค่า ── */
+function CheckerNameInput({group,value,onChange}){
+  const staff=useStaff();
+  return <NameInput value={value} onChange={onChange} options={staff[group]||[]} placeholder="พิมพ์ชื่อ แล้วเลือกจากรายการ"/>;
+}
+
 /* ── เตือนก่อนบันทึก: ยังไม่ใส่ชื่อ / ยังเช็คไม่ครบ ── */
 function missingItems(groups,checked){
   return groups.map(g=>({id:g.id,label:g.label,icon:g.icon,items:g.items.filter(i=>!checked[i.id]).map(i=>i.label)})).filter(g=>g.items.length);
@@ -696,7 +702,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
           <span style={{fontSize:26}}>{role.icon}</span>
           <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
-        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
+        <CheckerNameInput group="nurse" value={myName} onChange={v=>{setMyName(v);setSaved(false);}}/>
       </Card>
 
       {/* ผู้ปฏิบัติงานเวรนี้ */}
@@ -989,7 +995,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
           <span style={{fontSize:26}}>{role.icon}</span>
           <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
-        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
+        <CheckerNameInput group="driv" value={myName} onChange={v=>{setMyName(v);setSaved(false);}}/>
       </Card>
       <Card style={{paddingBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
@@ -1150,7 +1156,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
           <span style={{fontSize:26}}>{role.icon}</span>
           <div><div style={{fontWeight:800,fontSize:15,color:role.color}}>{role.label}</div><div style={{fontSize:12,color:"#7f93ab"}}>ผู้รับผิดชอบตรวจเช็ค</div></div>
         </div>
-        <input value={myName} onChange={e=>{setMyName(e.target.value);setSaved(false);}} placeholder="ชื่อ-นามสกุลของคุณ" style={BASE_INP}/>
+        <CheckerNameInput group="aemt" value={myName} onChange={v=>{setMyName(v);setSaved(false);}}/>
       </Card>
       <Card style={{paddingBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
