@@ -29,7 +29,7 @@ const SHIFT_META = {
 };
 
 /* ── Para/RN grouped items ── */
-const PARA_GROUPS = [
+let PARA_GROUPS = [
   {
     id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#e25c86",
     items:[
@@ -112,10 +112,12 @@ function roleTotal(roleId){
   return 0;
 }
 function entryDone(e){return e?Object.values(e.checked||{}).filter(Boolean).length:0;}
-function entryOK(e,roleId){const t=roleTotal(roleId);return !!(e&&e.name&&t>0&&entryDone(e)===t);}
+// ใช้จำนวนรายการ ณ วันที่เช็ค (ถ้ามีบันทึกไว้) เพื่อไม่ให้เวรเก่าเพี้ยนเมื่อแก้รายการอุปกรณ์
+function recTotal(e,roleId){return (e&&typeof e.total==="number")?e.total:roleTotal(roleId);}
+function entryOK(e,roleId){const t=recTotal(e,roleId);return !!(e&&e.name&&t>0&&entryDone(e)===t);}
 function checkMark(e,roleId){
   if(!e) return "ยังไม่เช็ค ❌";
-  const t=roleTotal(roleId),d=entryDone(e);
+  const t=recTotal(e,roleId),d=entryDone(e);
   return d===t&&t>0?"เช็คแล้ว ✅":`เช็คไม่ครบ ${d}/${t} ⚠️`;
 }
 // ช่องรายชื่อ: เวรเช้า/บ่าย = Para หรือ ไม้ 9 + ไม้ A, เวรดึก = ไม้ A1 + ไม้ A2
@@ -304,15 +306,8 @@ function exportToExcel(allData,equipment,selYear,selMonth){
       for(const role of ROLES){
         const k=recKey(selYear,selMonth,d,shift,role.id);
         const e=allData[k];
-        let done=0,total=0;
-        if(role.id==="para"){
-          total=PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
-          done=e?Object.values(e.checked||{}).filter(Boolean).length:0;
-        } else {
-          const its=equipment[role.id]||[];
-          total=its.length;
-          done=e?Object.values(e.checked||{}).filter(Boolean).length:0;
-        }
+        const total=recTotal(e,role.id);
+        const done=e?Object.values(e.checked||{}).filter(Boolean).length:0;
         const status=!e?"ไม่มีข้อมูล":done===total?"ครบ":"ไม่ครบ";
         rows.push([`${d} ${MONTH_NAMES[selMonth]} ${selYear+543}`,shift,role.short,e?.name||"-",done,total,status,e?.note||"-"]);
       }
@@ -603,7 +598,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
     setNoteError(false);setSaving(true);
     const paraTotal=PARA_GROUPS.reduce((s,g)=>s+g.items.length,0);
     const paraDone=PARA_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
-    await set(dbRef,{name:myName,checked,note,expDates,roleId:"para",savedAt:new Date().toISOString()});
+    await set(dbRef,{name:myName,checked,note,expDates,roleId:"para",total:roleTotal("para"),savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
     if(paraDone===paraTotal&&note.trim()) setShowSuccess(true);
   }
@@ -738,7 +733,7 @@ function ParaCheckPage({selYear,selMonth,selDay,selShift}){
 
 
 /* ── AEMT grouped items ── */
-const AEMT_GROUPS = [
+let AEMT_GROUPS = [
   {
     id:"airway", label:"1. Airway and Breathing", icon:"💨", color:"#6a8df5",
     items:[
@@ -798,7 +793,7 @@ const AEMT_GROUPS = [
 
 
 /* ── พนักงานขับรถ grouped items ── */
-const DRIV_GROUPS = [
+let DRIV_GROUPS = [
   {
     id:"equipment", label:"1. อุปกรณ์ในรถ", icon:"🚑", color:"#2bb594",
     items:[
@@ -836,6 +831,28 @@ const DRIV_GROUPS = [
 ];
 
 /* ── พนักงานขับรถ Check Page ── */
+/* ── รายการอุปกรณ์แก้ได้ในแอป: ถ้ามีใน Firebase (checklists/{role}) ใช้อันนั้น ไม่มีก็ใช้ค่าเริ่มต้นในโค้ด ── */
+const clone=x=>JSON.parse(JSON.stringify(x));
+const DEFAULT_CHECKLISTS={para:clone(PARA_GROUPS),aemt:clone(AEMT_GROUPS),driv:clone(DRIV_GROUPS)};
+function normalizeChecklist(v){
+  if(!Array.isArray(v)&&v&&typeof v==="object") v=Object.values(v);
+  if(!Array.isArray(v)) return null;
+  const groups=v.map(g=>{
+    if(!g||typeof g!=="object") return null;
+    let items=g.items; if(items&&!Array.isArray(items)) items=Object.values(items);
+    items=(items||[]).filter(i=>i&&i.id&&String(i.label||"").trim()).map(i=>({...i,label:String(i.label).trim()}));
+    return {id:String(g.id||"g_"+Math.random().toString(36).slice(2,8)),label:String(g.label||"หมวดใหม่"),icon:g.icon||"📦",color:g.color||"#4a86e8",items};
+  }).filter(Boolean);
+  return groups.length?groups:null;
+}
+function applyChecklists(data){
+  const d=data||{};
+  PARA_GROUPS=normalizeChecklist(d.para)||clone(DEFAULT_CHECKLISTS.para);
+  AEMT_GROUPS=normalizeChecklist(d.aemt)||clone(DEFAULT_CHECKLISTS.aemt);
+  DRIV_GROUPS=normalizeChecklist(d.driv)||clone(DEFAULT_CHECKLISTS.driv);
+}
+function currentGroups(roleId){return roleId==="para"?PARA_GROUPS:roleId==="aemt"?AEMT_GROUPS:DRIV_GROUPS;}
+
 function DrivCheckPage({selYear,selMonth,selDay,selShift}){
   const role=ROLE_MAP["driv"]; const shiftMeta=SHIFT_META[selShift];
   const key=recKey(selYear,selMonth,selDay,selShift,"driv");
@@ -870,7 +887,7 @@ function DrivCheckPage({selYear,selMonth,selDay,selShift}){
     setNoteError(false);setSaving(true);
     const drivTotal=DRIV_GROUPS.reduce((s,g)=>s+g.items.length,0);
     const drivDone=DRIV_GROUPS.reduce((s,g)=>s+g.items.filter(item=>checked[item.id]).length,0);
-    await set(dbRef,{name:myName,checked,note,o2Levels,scratchNote,roleId:"driv",savedAt:new Date().toISOString()});
+    await set(dbRef,{name:myName,checked,note,o2Levels,scratchNote,roleId:"driv",total:roleTotal("driv"),savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
     if(drivDone===drivTotal&&note.trim()) setShowSuccess(true);
   }
@@ -1025,7 +1042,7 @@ function AemtCheckPage({selYear,selMonth,selDay,selShift}){
   async function handleSave(){
     if(!note.trim()){setNoteError(true);return;}
     setNoteError(false);setSaving(true);
-    await set(dbRef,{name:myName,checked,note,expDates,roleId:"aemt",savedAt:new Date().toISOString()});
+    await set(dbRef,{name:myName,checked,note,expDates,roleId:"aemt",total:roleTotal("aemt"),savedAt:new Date().toISOString()});
     setSaving(false);setSaved(true);setWarn("duplicate");setTimeout(()=>setSaved(false),2500);
     if(doneItems===totalItems&&note.trim()) setShowSuccess(true);
   }
@@ -1270,7 +1287,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
     for(const shift of SHIFTS){
       const roleResults=ROLES.map(r=>{
         const e=getEntry(allData,selYear,selMonth,d,shift,r.id);
-        return{role:r,entry:e,done:getDone(e),total:getTotal(r.id)};
+        return{role:r,entry:e,done:getDone(e),total:recTotal(e,r.id)};
       });
       const ros=roster[rosterKey(selYear,selMonth,d,shift)];
       const allOK=roleResults.every(r=>r.entry&&r.entry.name&&r.done===r.total&&r.total>0);
@@ -1532,7 +1549,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
     for(let d=1;d<=days;d++){
       for(const shift of SHIFTS){
         const k=recKey(selYear,selMonth,d,shift,r.id); const e=allData[k];
-        const cnt=getDone(e); const tot=getTotal(r.id);
+        const cnt=getDone(e); const tot=recTotal(e,r.id);
         if(!e||!e.name){missing++;}else if(cnt===tot){done++;}else{incomplete++;}
       }
     }
@@ -1547,7 +1564,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
     SHIFTS.forEach(shift=>{
       const allOK=ROLES.every(r=>{
         const k=recKey(selYear,selMonth,d,shift,r.id); const e=allData[k];
-        const cnt=getDone(e); const tot=getTotal(r.id);
+        const cnt=getDone(e); const tot=recTotal(e,r.id);
         return e&&e.name&&cnt===tot&&tot>0;
       });
       if(allOK) ok++;
@@ -1801,6 +1818,98 @@ function ExpiryPage(){
   );
 }
 
+/* ── แก้รายการอุปกรณ์ที่ต้องเช็ค (ในแท็บตั้งค่า, ล็อก PIN) ── */
+function ChecklistEditor({defaultRole}){
+  const [roleId,setRoleId]=useState(ROLE_MAP[defaultRole]?defaultRole:"para");
+  const [draft,setDraft]=useState(()=>clone(currentGroups(roleId)));
+  const [dirty,setDirty]=useState(false);
+  const [busy,setBusy]=useState(false); const [msg,setMsg]=useState("");
+  const [custom,setCustom]=useState({});
+  useEffect(()=>{const u=onValue(ref(db,"checklists"),s=>setCustom(s.val()||{}));return()=>u();},[]);
+  // โหลดรายการใหม่เมื่อเปลี่ยนตำแหน่ง หรือมีคนอื่นบันทึก (ถ้ายังไม่ได้แก้ค้างไว้)
+  useEffect(()=>{if(!dirty) setDraft(clone(normalizeChecklist(custom[roleId])||DEFAULT_CHECKLISTS[roleId]));},[roleId,custom]);
+
+  const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
+  const SMALL={...BTN,padding:0,width:36,height:36,background:"#f1f6fc",color:"#5d7290",flexShrink:0};
+  const newId=p=>`${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`;
+  function upd(fn){setDraft(d=>{const n=clone(d);fn(n);return n;});setDirty(true);setMsg("");}
+  const total=draft.reduce((s,g)=>s+g.items.length,0);
+
+  function switchRole(id){
+    if(id===roleId) return;
+    if(dirty&&!window.confirm("ยังไม่ได้บันทึกการแก้ไข ต้องการทิ้งแล้วเปลี่ยนตำแหน่งไหม?")) return;
+    setDirty(false);setRoleId(id);setDraft(clone(normalizeChecklist(custom[id])||DEFAULT_CHECKLISTS[id]));setMsg("");
+  }
+  async function save(){
+    const clean=normalizeChecklist(draft);
+    if(!clean||!clean.some(g=>g.items.length)){setMsg("⚠️ ต้องมีอย่างน้อย 1 รายการ");return;}
+    const empty=draft.find(g=>g.items.some(i=>!String(i.label||"").trim()));
+    if(empty&&!window.confirm("มีบางรายการที่ยังไม่ได้ใส่ชื่อ จะถูกตัดออก บันทึกต่อไหม?")) return;
+    setBusy(true);
+    try{await set(ref(db,`checklists/${roleId}`),clean);setDirty(false);setMsg(`✅ บันทึกแล้ว · ${clean.reduce((s,g)=>s+g.items.length,0)} รายการ มีผลกับการเช็คครั้งถัดไป`);}
+    catch(e){setMsg("⚠️ บันทึกไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+  async function resetDefault(){
+    if(!window.confirm(`คืนค่ารายการของ ${ROLE_MAP[roleId].short} กลับเป็นค่าเริ่มต้น?`)) return;
+    setBusy(true);
+    try{await remove(ref(db,`checklists/${roleId}`));setDirty(false);setDraft(clone(DEFAULT_CHECKLISTS[roleId]));setMsg("✅ คืนค่าเริ่มต้นแล้ว");}
+    catch(e){setMsg("⚠️ ไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+
+  return(
+    <Card style={{border:"1.5px solid #9fd3e6"}}>
+      <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a",marginBottom:4}}>📋 รายการอุปกรณ์ที่ต้องเช็ค</div>
+      <div style={{fontSize:12,color:"#5d7290",marginBottom:12}}>แก้ชื่อ เพิ่ม ลบ หรือสลับลำดับได้ แล้วกดบันทึก · เวรที่เช็คไปแล้วยังนับตามรายการเดิม</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+        {ROLES.map(r=>(
+          <button key={r.id} type="button" onClick={()=>switchRole(r.id)} style={{...BTN,background:roleId===r.id?"#2a9fb8":"#f1f6fc",color:roleId===r.id?"#fff":"#5d7290"}}>
+            {r.icon} {r.short}{custom[r.id]?" ✎":""}
+          </button>
+        ))}
+      </div>
+
+      {draft.map((g,gi)=>(
+        <div key={g.id} style={{border:"1px solid #e3edf8",borderRadius:12,padding:10,marginBottom:10,background:"#fbfdff"}}>
+          <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:20}}>{g.icon}</span>
+            <input value={g.label} onChange={e=>upd(d=>{d[gi].label=e.target.value;})} aria-label="ชื่อหมวด"
+              style={{...BASE_INP,fontWeight:700,fontSize:15}}/>
+            <button type="button" aria-label="เลื่อนหมวดขึ้น" disabled={gi===0} onClick={()=>upd(d=>{[d[gi-1],d[gi]]=[d[gi],d[gi-1]];})} style={{...SMALL,opacity:gi===0?.4:1}}>▲</button>
+            <button type="button" aria-label="เลื่อนหมวดลง" disabled={gi===draft.length-1} onClick={()=>upd(d=>{[d[gi+1],d[gi]]=[d[gi],d[gi+1]];})} style={{...SMALL,opacity:gi===draft.length-1?.4:1}}>▼</button>
+            <button type="button" aria-label="ลบหมวด" onClick={()=>{if(window.confirm(`ลบหมวด “${g.label}” และ ${g.items.length} รายการในหมวดนี้?`)) upd(d=>{d.splice(gi,1);});}} style={{...SMALL,background:"rgba(226,92,134,0.12)",color:"#d6456f"}}>✕</button>
+          </div>
+          {g.items.map((it,ii)=>(
+            <div key={it.id} style={{display:"flex",gap:5,alignItems:"center",marginBottom:6}}>
+              <span style={{fontSize:12,color:"#7f93ab",width:18,textAlign:"right",flexShrink:0}}>{ii+1}.</span>
+              <textarea value={it.label} onChange={e=>upd(d=>{d[gi].items[ii].label=e.target.value.replace(/\n/g," ");})} placeholder="ชื่ออุปกรณ์" aria-label={`รายการที่ ${ii+1}`}
+                rows={Math.min(3,Math.max(1,Math.ceil((it.label||"").length/24)))}
+                style={{...BASE_INP,fontSize:14,padding:"8px 10px",resize:"none",lineHeight:1.4,minWidth:0}}/>
+              <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
+                <button type="button" aria-label="เลื่อนขึ้น" disabled={ii===0} onClick={()=>upd(d=>{const a=d[gi].items;[a[ii-1],a[ii]]=[a[ii],a[ii-1]];})} style={{...SMALL,height:22,width:32,fontSize:10,opacity:ii===0?.35:1}}>▲</button>
+                <button type="button" aria-label="เลื่อนลง" disabled={ii===g.items.length-1} onClick={()=>upd(d=>{const a=d[gi].items;[a[ii+1],a[ii]]=[a[ii],a[ii+1]];})} style={{...SMALL,height:22,width:32,fontSize:10,opacity:ii===g.items.length-1?.35:1}}>▼</button>
+              </div>
+              <button type="button" aria-label="ลบรายการ" onClick={()=>upd(d=>{d[gi].items.splice(ii,1);})} style={{...SMALL,background:"rgba(226,92,134,0.12)",color:"#d6456f"}}>✕</button>
+            </div>
+          ))}
+          <button type="button" onClick={()=>upd(d=>{d[gi].items.push({id:newId("i"),label:""});})} style={{...BTN,marginTop:4,marginLeft:23,background:"#e9f1fb",color:"#2f6fd6"}}>＋ เพิ่มรายการในหมวดนี้</button>
+        </div>
+      ))}
+      <button type="button" onClick={()=>upd(d=>{d.push({id:newId("g"),label:`${d.length+1}. หมวดใหม่`,icon:"📦",color:"#4a86e8",items:[{id:newId("i"),label:""}]});})}
+        style={{...BTN,width:"100%",padding:"10px 0",background:"#f1f6fc",color:"#2f6fd6",marginBottom:12}}>＋ เพิ่มหมวด</button>
+
+      {msg&&<div style={{fontSize:13,marginBottom:10,color:msg.startsWith("⚠️")?"#d6456f":"#128a6a"}}>{msg}</div>}
+      <div style={{display:"flex",gap:8}}>
+        <button type="button" onClick={resetDefault} disabled={busy} style={{...BTN,flex:1,padding:"12px 0",background:"#f1f6fc",color:"#5d7290"}}>คืนค่าเริ่มต้น</button>
+        <button type="button" onClick={save} disabled={busy||!dirty} style={{...BTN,flex:2,padding:"12px 0",background:dirty?"#4a86e8":"#b8cde8",color:"#fff",fontSize:14}}>
+          {busy?"⏳ กำลังบันทึก...":dirty?`✨ บันทึก (${total} รายการ)`:"บันทึกแล้ว"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 /* ── จัดการรายชื่อเจ้าหน้าที่ (ในแท็บตั้งค่า) ── */
 function StaffManager(){
   const staff=useStaff();
@@ -1889,20 +1998,7 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
 
   return(
     <div>
-      <Card>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
-          <span style={{fontSize:28}}>{role.icon}</span>
-          <div>
-            <div style={{fontSize:16,fontWeight:800}}>ตั้งค่ารายการอุปกรณ์</div>
-            <div style={{fontSize:13,color:"#5d7290"}}>สำหรับ {role.label}</div>
-          </div>
-        </div>
-        {(myRole==="para"||myRole==="aemt"||myRole==="driv")&&(
-          <div style={{marginTop:10,padding:"10px 14px",background:"rgba(43,181,148,0.1)",borderRadius:8,fontSize:13,color:"#1a8a6b"}}>
-            ℹ️ {myRole==="para"?"Para/RN":myRole==="aemt"?"AEMT":"พนักงานขับรถ"} ใช้รายการอุปกรณ์แบบหมวดหมู่ที่กำหนดไว้ในระบบค่ะ ไม่สามารถแก้ไขผ่านหน้านี้ได้
-          </div>
-        )}
-      </Card>
+      <ChecklistEditor defaultRole={myRole}/>
 
       {myRole!=="para"&&myRole!=="aemt"&&myRole!=="driv"&&(
         <>
@@ -2028,6 +2124,9 @@ export default function App(){
   const [pinUnlocked,setPinUnlocked]=useState(()=>{const t=ls(PIN_SESSION_KEY,0);return t&&(Date.now()-t)<8*60*60*1000;});
 
   useEffect(()=>{const u=onValue(ref(db,"equipment"),snap=>{const d=snap.val();if(d)setEquipment(d);});return()=>u();},[]);
+  // รายการอุปกรณ์ที่แก้ในแอป
+  const [,setChkVer]=useState(0);
+  useEffect(()=>{const u=onValue(ref(db,"checklists"),snap=>{applyChecklists(snap.val());setChkVer(v=>v+1);});return()=>u();},[]);
 
   function selectRole(id){setMyRole(id);ss(KEY_ROLE,id);}
   function switchRole(){setMyRole(null);ss(KEY_ROLE,null);setView("check");}
