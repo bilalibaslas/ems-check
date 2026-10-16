@@ -1410,6 +1410,121 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
 }
 
 /* ── รายชื่อเวรย้อนหลัง / ภาพรวม ── */
+/* ── นำเข้ารายชื่อเวรจากข้อความรายงานใน LINE (ใช้เติมย้อนหลังเวรที่ไม่ได้ลงในแอป) ── */
+const TH_MONTH_ABBR=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+function parseLineReports(text){
+  const chunks=String(text||"").split(/(?=รายงาน\s*(?:เวร\s*)?(?:EMS|Ambulance))/i).map(x=>x.trim()).filter(Boolean);
+  const out=[];
+  for(const ch of chunks){
+    // วันที่
+    let y=null,m=null,d=null;
+    const full=ch.match(new RegExp(`(\\d{1,2})\\s*(${MONTH_NAMES.join("|")})\\s*(\\d{4})`));
+    if(full){d=+full[1];m=MONTH_NAMES.indexOf(full[2]);y=+full[3];}
+    else{
+      const ab=ch.match(new RegExp(`(\\d{1,2})\\s*(${TH_MONTH_ABBR.map(x=>x.replace(/\./g,"\\.")).join("|")})\\s*(\\d{2,4})`));
+      if(ab){d=+ab[1];m=TH_MONTH_ABBR.indexOf(ab[2]);y=+ab[3];if(y<100)y+=2500;}
+      else{const nm=ch.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(nm){d=+nm[1];m=+nm[2]-1;y=+nm[3];if(y<100)y+=2500;}}
+    }
+    if(y&&y>2400) y-=543;
+    // เวร
+    const sm=ch.match(/เวร\s*[:：]?\s*(เช้า|บ่าย|ดึก)/)||ch.match(/(เช้า|บ่าย|ดึก)/);
+    const shift=sm?sm[1]:null;
+    // รายชื่อ
+    const r={};
+    const take=(id,val)=>{val=String(val||"").replace(/\s+/g," ").trim();if(val&&val!=="-"&&!/เช็ค/.test(val)&&!r[id]) r[id]=val;};
+    for(const raw of ch.split(/\n/)){
+      const line=raw.trim(); if(!line) continue;
+      const ci=line.search(/[:：]/);
+      const lab=ci>=0?line.slice(0,ci):line; const val=ci>=0?line.slice(ci+1):"";
+      if(/ทะเบียน/.test(line)){take("vehicle",line.split(/ทะเบียน/)[1].replace(/^[\s:：]*(รถที่ใช้)?[\s:：]*/,""));continue;}
+      if(ci<0) continue;
+      if(/Pre-?\s*hos/i.test(lab)&&/เสริม/.test(lab)) take("ph2",val);
+      else if(/Pre-?\s*hos/i.test(lab)) take("ph1",val);
+      else if(/ไม้\s*A\s*1/i.test(lab)) take("a1",val);
+      else if(/ไม้\s*A\s*2/i.test(lab)) take("a2",val);
+      else if(/A-?\s*EMT/i.test(lab)) take("aemt",val);
+      else if(/ไม้\s*A\b|RN/i.test(lab)) take("a",val);
+      else if(/PARA|ไม้\s*9/i.test(lab)) take("p9",val);
+      else if(/\bEP\b/i.test(lab)) take("ep",val);
+      else if(/พนักงานขับรถ|พขร/.test(lab)) take("driv",val);
+    }
+    const ok=y&&m!==null&&m>=0&&d&&shift;
+    out.push({ok:!!ok,y,m,d,shift,r,key:ok?rosterKey(y,m,d,shift):null,count:Object.keys(r).length});
+  }
+  return out.filter(x=>x.count>0||x.ok);
+}
+function LineImport(){
+  const [open,setOpen]=useState(false);
+  const [text,setText]=useState(""); const [items,setItems]=useState([]);
+  const [roster,setRoster]=useState({}); const [overwrite,setOverwrite]=useState({});
+  const [busy,setBusy]=useState(false); const [msg,setMsg]=useState("");
+  useEffect(()=>{if(!open) return; const u=onValue(ref(db,"roster"),s=>setRoster(s.val()||{}));return()=>u();},[open]);
+  const BTN={padding:"8px 12px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700};
+  function parse(){const it=parseLineReports(text);setItems(it);setOverwrite({});setMsg(it.length?"":"⚠️ ไม่พบข้อความรายงานเวร ลองคัดลอกมาทั้งข้อความ");}
+  const usable=items.filter(x=>x.ok&&(!roster[x.key]||overwrite[x.key]));
+  async function save(){
+    setBusy(true);setMsg("");
+    try{
+      for(const x of usable){
+        const shiftFields=rosterFieldsFor(x.shift).map(f=>f.id);
+        const data={}; shiftFields.forEach(id=>data[id]=x.r[id]||"");
+        if(x.r.a&&x.shift==="ดึก"&&!data.a1) data.a1=x.r.a; // รายงานเก่าบางเวรดึกเขียนเป็นไม้ A
+        data.savedAt=new Date().toISOString(); data.source="line";
+        await set(ref(db,`roster/${x.key}`),data);
+      }
+      setMsg(`✅ นำเข้าแล้ว ${usable.length} เวร`);setItems([]);setText("");
+    }catch(e){setMsg("⚠️ นำเข้าไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+  return(
+    <Card style={{border:"1.5px solid #9fd3e6"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a"}}>📥 เติมรายชื่อย้อนหลังจาก LINE</div>
+          <div style={{fontSize:12,color:"#5d7290"}}>คัดลอกข้อความ "รายงาน Ambulance" จากกลุ่ม LINE มาวาง ได้หลายเวรพร้อมกัน</div>
+        </div>
+        <button type="button" onClick={()=>{setOpen(o=>!o);setMsg("");}} style={{...BTN,background:open?"#f1f6fc":"#4a86e8",color:open?"#5d7290":"#fff"}}>{open?"ปิด":"เปิด"}</button>
+      </div>
+      {open&&(
+        <div style={{marginTop:12}}>
+          <textarea value={text} onChange={e=>setText(e.target.value)} rows={7} placeholder={"วางข้อความรายงานเวรจาก LINE ที่นี่\nเช่น 🌻 รายงาน Ambulance 🌻\nเวรเช้า ประจำวันที่ 6 ตุลาคม 2569\nEP : …"}
+            style={{...BASE_INP,fontSize:15,lineHeight:1.6,resize:"vertical"}}/>
+          <button type="button" onClick={parse} style={{...BTN,width:"100%",padding:"11px 0",marginTop:8,background:"#2a9fb8",color:"#fff"}}>🔍 อ่านข้อความ</button>
+          {items.map((x,i)=>{
+            const exists=x.ok&&roster[x.key];
+            return(
+              <div key={i} style={{marginTop:10,border:`1px solid ${x.ok?"#e3edf8":"#f2c4d3"}`,borderRadius:10,padding:10,background:"#fbfdff"}}>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                  <div style={{flex:1,fontWeight:800,fontSize:14}}>
+                    {x.ok?`${SHIFT_META[x.shift].icon} ${x.d} ${MONTH_NAMES[x.m]} ${x.y+543} · เวร${x.shift}`:"⚠️ อ่านวันที่หรือเวรไม่ได้ (ข้ามรายการนี้)"}
+                  </div>
+                  {exists&&(
+                    <label style={{fontSize:12,color:"#b4530f",display:"flex",alignItems:"center",gap:4}}>
+                      <input type="checkbox" checked={!!overwrite[x.key]} onChange={e=>setOverwrite(o=>({...o,[x.key]:e.target.checked}))}/> มีแล้ว · เขียนทับ
+                    </label>
+                  )}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"2px 10px",fontSize:13}}>
+                  {(x.shift?rosterFieldsFor(x.shift):ROSTER_ALL).filter(f=>x.r[f.id]||!f.optional).map(f=>[
+                    <span key={f.id+"l"} style={{color:"#7f93ab"}}>{f.label}</span>,
+                    <span key={f.id+"v"} style={{color:x.r[f.id]?"#1f3047":"#d6456f"}}>{x.r[f.id]||"ไม่พบ"}</span>
+                  ])}
+                </div>
+              </div>
+            );
+          })}
+          {items.length>0&&(
+            <button type="button" disabled={busy||!usable.length} onClick={save} style={{...BTN,width:"100%",padding:"12px 0",marginTop:10,background:usable.length?"#4a86e8":"#b8cde8",color:"#fff",fontSize:14}}>
+              {busy?"⏳ กำลังบันทึก...":`✨ บันทึก ${usable.length} เวร`}
+            </button>
+          )}
+          {msg&&<div style={{fontSize:13,marginTop:8,color:msg.startsWith("⚠️")?"#d6456f":"#128a6a"}}>{msg}</div>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function RosterHistoryPage({selYear,selMonth,onLock}){
   const [roster,setRoster]=useState({}); const [allData,setAllData]=useState({});
   const [loading,setLoading]=useState(true); const [filter,setFilter]=useState("all");
@@ -1469,6 +1584,7 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
   if(loading) return <div style={{textAlign:"center",padding:60,color:"#7f93ab"}}><div style={{fontSize:32,marginBottom:12}}>⏳</div>กำลังโหลด...</div>;
   return(
     <div>
+      <LineImport/>
       <Card>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
           <div>
@@ -2343,7 +2459,14 @@ function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,
 export default function App(){
   const {year:ty,month:tm,day:td}=todayParts();
   const {shift:autoShift,year:shiftYear,month:shiftMonth,day:shiftDay}=getShiftAndDate();
-  const [myRole,setMyRole]=useState(()=>ls(KEY_ROLE,null));
+  // QR code ติดรถ: ลิงก์ ?role=para|aemt|driv จะเลือกตำแหน่งให้เลย
+  const [myRole,setMyRole]=useState(()=>{
+    try{
+      const q=new URLSearchParams(window.location.search).get("role");
+      if(q&&ROLE_MAP[q]){ss(KEY_ROLE,q);window.history.replaceState(null,"",window.location.pathname);return q;}
+    }catch{}
+    return ls(KEY_ROLE,null);
+  });
   const [view,setView]=useState("check");
   const [selYear,setSelYear]=useState(shiftYear); const [selMonth,setSelMonth]=useState(shiftMonth);
   const [selDay,setSelDay]=useState(shiftDay); const [selShift,setSelShift]=useState(autoShift);
