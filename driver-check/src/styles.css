@@ -143,3 +143,24 @@ details summary { cursor: pointer; font-weight: 700; min-height: 32px; }
 .empty { color: var(--muted); text-align: center; padding: 20px 8px; border: 1.5px dashed var(--line2); border-radius: 14px; font-size: 14px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top)); z-index: 60; max-width: calc(100% - 32px); text-align: center; background: var(--ink); color: #fff; padding: 9px 18px; border-radius: 999px; font-size: 14px; box-shadow: 0 6px 20px rgba(20,35,60,0.3); }
 @media (max-width: 360px) { .seg button { padding: 6px 9px; } .tabs button { font-size: 14px; } }
+
+/* แบบประเมินความล้า */
+.grid3 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.grid3 .wide { grid-column: 1 / -1; }
+.stack { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.grid3 .inp.big { font-size: 17px; padding: 8px 10px; }
+.rules { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.rules > div { display: flex; justify-content: space-between; gap: 10px; }
+.rules b { white-space: nowrap; color: var(--muted); }
+.t-ok { color: var(--ok) !important; } .t-bad { color: var(--bad) !important; }
+.kss { display: flex; flex-direction: column; gap: 4px; }
+.kss button { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: center; text-align: left; border: 1.5px solid transparent; background: transparent; border-radius: 10px; padding: 7px 10px; min-height: 40px; font-size: 14.5px; }
+.kss button b { text-align: center; }
+.kss button.warn { background: var(--warn-bg); } .kss button.warn b { color: var(--warn); }
+.kss button.bad { background: var(--bad-bg); } .kss button.bad b { color: var(--bad); }
+.kss button[aria-pressed=true] { border-color: var(--pri); background: var(--chip); font-weight: 700; }
+.kss.compact { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+.kss.compact button { grid-template-columns: 1fr; width: 38px; min-height: 40px; padding: 0; justify-items: center; border: 1.5px solid var(--line2); background: #fff; }
+.kss.compact button.warn { background: var(--warn-bg); } .kss.compact button.bad { background: var(--bad-bg); }
+.kss.compact button[aria-pressed=true] { border-color: var(--pri); background: var(--pri); }
+.kss.compact button[aria-pressed=true] b { color: #fff; }
