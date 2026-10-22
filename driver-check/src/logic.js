@@ -2,13 +2,16 @@
 
 export const MONTHS = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
 export const SHIFTS = ["เช้า", "บ่าย", "ดึก"];
+// เวลาจบเวร (นาทีของวัน) ใช้คำนวณชั่วโมงที่ตื่นถึงจบเวร
+const SHIFT_END = { "เช้า": 16 * 60 + 15, "บ่าย": 15, "ดึก": 8 * 60 + 15 };
 
-// ค่าตั้งต้น (ตัวอย่าง) — แก้ได้ในแท็บสรุป › ตั้งค่าเกณฑ์ (ใช้ PIN เดียวกับ ems-check)
+// ค่าตั้งต้น — แก้ได้ในแท็บสรุป › ตั้งค่า
 export const TH_DEF = {
   alcMax: 0, atLimit: 2,
   sbpLow: 90, sbpHigh: 160, sbpCrisis: 180,
   dbpHigh: 100, dbpCrisis: 120,
   prLow: 50, prHigh: 110, prCrisis: 130,
+  sleep24Min: 5, sleep48Min: 12, kssWarn: 7, kssStop: 8,
 };
 export const TH_LABEL = {
   alcMax: "แอลกอฮอล์สูงสุดที่ผ่าน (mg/dl)",
@@ -21,16 +24,34 @@ export const TH_LABEL = {
   prLow: "PR ต่ำกว่า → ส่ง ER",
   prHigh: "PR มากกว่า → ไม่ผ่าน",
   prCrisis: "PR ตั้งแต่ → ส่ง ER",
+  sleep24Min: "นอนใน 24 ชม. ขั้นต่ำ (ชม.)",
+  sleep48Min: "นอนใน 48 ชม. ขั้นต่ำ (ชม.)",
+  kssWarn: "KSS ตั้งแต่ → เหลือง",
+  kssStop: "KSS ตั้งแต่ → แดง",
 };
 
-export const FATIGUE = [
-  ["sleep", "นอนน้อยกว่า 6 ชม. ใน 24 ชม."],
-  ["sleepy", "ง่วง อ่อนล้า สมาธิไม่ดี"],
-  ["sick", "เจ็บป่วย / กินยาที่ทำให้ง่วง"],
-  ["long", "ทำงานต่อเนื่องเกิน 12 ชม."],
+// Karolinska Sleepiness Scale (แปลไทยโดยผู้พัฒนา ยังไม่ใช่ฉบับแปลที่ผ่านการตรวจสอบ)
+export const KSS = [
+  [1, "ตื่นตัวมากที่สุด"],
+  [2, "ตื่นตัวมาก"],
+  [3, "ตื่นตัว"],
+  [4, "ค่อนข้างตื่นตัว"],
+  [5, "ไม่ตื่นตัวและไม่ง่วง"],
+  [6, "เริ่มมีอาการง่วงบ้าง"],
+  [7, "ง่วง แต่ยังไม่ต้องฝืน"],
+  [8, "ง่วง ต้องฝืนบ้าง"],
+  [9, "ง่วงมาก ต้องฝืนเต็มที่ สู้กับความง่วง"],
+];
+export const OBS = [
+  ["yawn", "หาวบ่อย ตาปรือ ขยี้ตา"],
+  ["slow", "ตอบสนอง/พูดช้า สมาธิไม่ดี"],
+  ["sick", "เจ็บป่วย หรือกินยาที่ทำให้ง่วง"],
 ];
 
-export const REASONS = ["รอข้อมูล/พิกัดจากศูนย์", "รอทีมครบ", "ติดงานใน ER", "รถ/อุปกรณ์ไม่พร้อม", "อื่นๆ"];
+export const REASONS = [
+  "รอพยาบาล", "รอ paramedic", "รอ AEMT", "รอพนักงานขับรถ", "รอข้อมูล/พิกัดจากศูนย์",
+  "ทีมเข้าห้องน้ำ", "ติดงานใน ER", "ติดเคสห้องเบอร์ 2", "อุปกรณ์ไม่พร้อม", "อื่นๆ",
+];
 
 export const pad = (n) => String(n).padStart(2, "0");
 export const ds = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -42,6 +63,7 @@ export function thaiDate(iso) {
 }
 export const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
 export const fmt = (v) => (v == null ? "-" : String(Math.round(v * 10) / 10));
+const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
 // เวรเช้า 08:15–16:14, บ่าย 16:15–00:14, ดึก 00:15–08:14 (นับเป็นของวันก่อนหน้า เหมือน ems-check)
 export function currentShift(now = new Date()) {
@@ -54,13 +76,52 @@ export function currentShift(now = new Date()) {
   return { date: ds(now), shift: "บ่าย" };
 }
 
-/* ── ต้นเวร ── */
-export function evalStart(s, th) {
+/* ── ความล้า: ประวัติการนอน (Dawson & McCulloch) + KSS + สิ่งที่ผู้ตรวจสังเกต ── */
+// ชั่วโมงที่ตื่นจนถึงจบเวร = (เวลาตรวจ − เวลาตื่น) + (เวลาจบเวร − เวลาตรวจ) คิดแบบวนรอบ 24 ชม.
+export function awakeAtShiftEnd(wake, checkTime, shift) {
+  const w = toMin(wake), c = toMin(checkTime), e = SHIFT_END[shift];
+  if (w == null || c == null || e == null) return null;
+  const sofar = (c - w + 1440) % 1440;
+  const left = (e - c + 1440) % 1440;
+  return (sofar + left) / 60;
+}
+
+export function fatigueEval(s, shift, th, nowTime) {
   s = s || {};
-  const fat = s.fatigue || {};
+  const s24 = num(s.sleep24), s48 = num(s.sleep48), kss = num(s.kss);
+  const obs = s.obs || {};
+  const awake = awakeAtShiftEnd(s.wake, s.time || nowTime, shift);
+  const rules = [
+    { id: "s24", label: `นอน 24 ชม. อย่างน้อย ${th.sleep24Min} ชม.`, value: s24, fail: s24 != null ? s24 < th.sleep24Min : null },
+    { id: "s48", label: `นอน 48 ชม. อย่างน้อย ${th.sleep48Min} ชม.`, value: s48, fail: s48 != null ? s48 < th.sleep48Min : null },
+    { id: "awake", label: "ตื่นถึงจบเวร ไม่เกินชั่วโมงที่นอนใน 48 ชม.", value: awake, fail: awake != null && s48 != null ? awake > s48 : null },
+  ];
+  const sleepFails = rules.filter((r) => r.fail).length;
+  const obsList = OBS.filter(([k]) => obs[k]).map(([, t]) => t);
+  const kssWarn = kss != null && kss >= th.kssWarn && kss < th.kssStop;
+  const kssStop = kss != null && kss >= th.kssStop;
+  const count = sleepFails + (kssWarn ? 1 : 0) + obsList.length;
+  const reasons = [
+    ...rules.filter((r) => r.fail).map((r) => `ไม่ผ่าน: ${r.label}`),
+    ...(kss != null && (kssWarn || kssStop) ? [`KSS ${kss}`] : []),
+    ...obsList,
+  ];
+  let level;
+  if (kssStop || count >= 2) level = "red";
+  else if (count === 1) level = "yellow";
+  else if (s24 == null || kss == null) level = "pending";
+  else level = "green";
+  if (s24 == null && s48 == null && kss == null && !obsList.length) level = "none";
+  return { level, rules, awake, kss, reasons, sleepFails };
+}
+
+/* ── ต้นเวร ── */
+export function evalStart(s, th, shift) {
+  s = s || {};
   const alc = num(s.alc), sbp = num(s.sbp), dbp = num(s.dbp), pr = num(s.pr);
-  if (alc == null && sbp == null && dbp == null && pr == null) return { level: "none", items: [] };
-  const fail = [], er = [];
+  const fat = fatigueEval(s, shift, th);
+  if (alc == null && sbp == null && dbp == null && pr == null && fat.level === "none") return { level: "none", items: [], fat };
+  const fail = [], er = [], caution = [];
   if (alc != null && alc > th.alcMax) fail.push(`แอลกอฮอล์ ${alc} mg/dl`);
   if (sbp != null) {
     if (sbp < th.sbpLow) er.push(`SBP ${sbp} ต่ำ (สงสัยภาวะ shock)`);
@@ -76,16 +137,21 @@ export function evalStart(s, th) {
     else if (pr >= th.prCrisis) er.push(`PR ${pr} เร็วมาก`);
     else if (pr > th.prHigh) fail.push(`PR ${pr} เร็ว`);
   }
-  FATIGUE.forEach(([k, t]) => { if (fat[k] === "yes") fail.push("ความล้า: " + t); });
+  if (fat.level === "red") fail.push(`ความล้าระดับแดง (${fat.reasons.join(", ")})`);
+  if (fat.level === "yellow") caution.push(`ความล้าระดับเหลือง (${fat.reasons.join(", ")})`);
   if (s.fit === "unfit") fail.push("ผู้ตรวจประเมินว่าไม่เหมาะสมต่อการขับ");
-  if (er.length) return { level: "er", items: [...er, ...fail] };
-  if (fail.length) return { level: "fail", items: fail };
+  if (er.length) return { level: "er", items: [...er, ...fail], fat };
+  if (fail.length) return { level: "fail", items: fail, fat };
   const missing = [];
   if (alc == null) missing.push("แอลกอฮอล์");
   if (sbp == null || dbp == null) missing.push("BP");
   if (pr == null) missing.push("PR");
+  if (num(s.sleep24) == null) missing.push("ชั่วโมงนอน");
+  if (num(s.kss) == null) missing.push("KSS");
   if (!s.fit) missing.push("ความเห็นผู้ตรวจ");
-  return { level: missing.length ? "pending" : "ok", items: missing };
+  if (missing.length) return { level: "pending", items: missing, fat, caution };
+  if (caution.length) return { level: "caution", items: caution, fat };
+  return { level: "ok", items: [], fat };
 }
 
 // ค่าผิดปกติรายช่อง สำหรับทำสีช่องกรอก
@@ -99,17 +165,24 @@ export function vitalFlags(s, th) {
   };
 }
 
+const FAT_TH = { green: "เขียว", yellow: "เหลือง", red: "แดง", pending: "ยังไม่ครบ", none: "-" };
+export const fatigueLabel = (l) => FAT_TH[l] || "-";
+
 export function msgStart(date, shift, s, r, names) {
   s = s || {};
-  const fat = s.fatigue || {};
+  const fat = r.fat || { level: "none" };
   const L = ["รายงานการตรวจความพร้อมพนักงานขับรถ ต้นเวร", `เวร ${shift} วันที่ ${thaiDate(date)}`];
   if (names.driver) L.push(`พขร. ${names.driver}`);
   L.push(`1. ปริมาณแอลกอฮอล์ ${s.alc ?? "-"} mg/dl`);
   L.push(`2. BP ${s.sbp ?? "-"}/${s.dbp ?? "-"} mmHg  PR ${s.pr ?? "-"} /min${s.spo2 != null && s.spo2 !== "" ? `  SpO2 ${s.spo2}%` : ""}`);
-  const answered = FATIGUE.filter(([k]) => fat[k]).length;
-  const yes = FATIGUE.filter(([k]) => fat[k] === "yes").length;
-  L.push(`3. ประเมินความล้า: ${answered === 0 ? "-" : yes ? `พบ ${yes} ข้อ` : "ไม่พบความเสี่ยง"}`);
-  const res = { ok: "พร้อมปฏิบัติงาน", fail: "ไม่ผ่าน เปลี่ยน พขร.", er: "ไม่ผ่าน เปลี่ยน พขร. และส่งตรวจ ER", pending: "รอข้อมูล", none: "รอข้อมูล" }[r.level];
+  L.push(`3. ความล้า: นอน 24 ชม. ${s.sleep24 ?? "-"} ชม. / 48 ชม. ${s.sleep48 ?? "-"} ชม. · KSS ${s.kss ?? "-"} · ระดับ${fatigueLabel(fat.level)}`);
+  const res = {
+    ok: "พร้อมปฏิบัติงาน",
+    caution: "ปฏิบัติงานได้ แต่ต้องมีมาตรการลดความล้า",
+    fail: "ไม่ผ่าน เปลี่ยน พขร.",
+    er: "ไม่ผ่าน เปลี่ยน พขร. และส่งตรวจ ER",
+    pending: "รอข้อมูล", none: "รอข้อมูล",
+  }[r.level];
   L.push(`ผลประเมิน: ${res}`);
   const a = s.actions || {};
   const done = [a.po && "รายงาน พอป.", a.admin && "แจ้งฝ่ายบริหาร", a.er && "ส่งตรวจ ER"].filter(Boolean);
@@ -135,11 +208,26 @@ export function runCleared(r, th) {
 export function runHadPositive(r, th) {
   return blowsOf(r).some((b) => num(b.alc) != null && num(b.alc) > th.alcMax);
 }
-export function reasonText(r) {
-  if (!r.reason) return "";
-  if (r.reason === "อื่นๆ") return (r.reasonNote || "").trim();
-  return r.reason + (r.reasonNote && r.reasonNote.trim() ? ` (${r.reasonNote.trim()})` : "");
+// เหตุผลเลือกได้หลายข้อ (reasons[]); ข้อมูลเก่าที่มี reason เดียวยังอ่านได้
+export function reasonsOf(r) {
+  if (Array.isArray(r.reasons)) return r.reasons.filter(Boolean);
+  if (r.reasons && typeof r.reasons === "object") return Object.values(r.reasons).filter(Boolean);
+  return r.reason ? [r.reason] : [];
 }
+export function reasonText(r) {
+  const list = reasonsOf(r).filter((x) => x !== "อื่นๆ");
+  const note = (r.reasonNote || "").trim();
+  const hasOther = reasonsOf(r).includes("อื่นๆ");
+  if (!list.length && !hasOther) return "";
+  if (!list.length) return note;
+  return list.join(" และ ") + (note ? ` (${note})` : "");
+}
+export const reasonReady = (r) => {
+  const rs = reasonsOf(r);
+  if (!rs.length) return false;
+  if (rs.length === 1 && rs[0] === "อื่นๆ") return !!(r.reasonNote || "").trim();
+  return true;
+};
 
 export function msgAlc(date, shift, runs, th) {
   const L = ["รายงานการเป่าแอลกอฮอล์ (รายครั้ง) ของพนักงานขับรถ ก่อนออกปฏิบัติการ", `เวร ${shift} วันที่ ${thaiDate(date)}`];
@@ -178,21 +266,24 @@ export function startsOf(d) {
   const prev = Object.entries(d.startPrev || {}).sort(([a], [b]) => (a < b ? -1 : 1)).map(([, s]) => s);
   return d.start ? [...prev, d.start] : prev;
 }
+
 export function summarize(list, th) {
   const st = {
-    shifts: list.length, starts: 0, startFail: 0, startEr: 0, startAlc: 0,
+    shifts: list.length, starts: 0, startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
     runs: 0, departed: 0, alcPos: 0, atN: 0, within: 0, noReason: 0, pendingAt: 0,
     ats: [], reasons: {}, lateList: [],
     byShift: Object.fromEntries(SHIFTS.map((s) => [s, { runs: 0, atN: 0, sum: 0, late: 0 }])),
   };
   list.forEach((d) => {
     startsOf(d).forEach((s) => {
-      const r = evalStart(s, th);
+      const r = evalStart(s, th, d.shift);
       if (r.level !== "none") {
         st.starts++;
         if (r.level === "fail") st.startFail++;
         if (r.level === "er") { st.startFail++; st.startEr++; }
       }
+      if (r.fat.level === "yellow") st.fatYellow++;
+      if (r.fat.level === "red") st.fatRed++;
       if (num(s.alc) != null && num(s.alc) > th.alcMax) st.startAlc++;
     });
     sortedRuns(d.runs).forEach((x) => {
@@ -206,11 +297,10 @@ export function summarize(list, th) {
       st.atN++; st.ats.push(at); bs.atN++; bs.sum += at;
       if (at <= th.atLimit) { st.within++; return; }
       bs.late++;
-      const rt = reasonText(x);
-      if (!rt) st.noReason++;
-      const k = x.reason || "ไม่ระบุ";
-      st.reasons[k] = (st.reasons[k] || 0) + 1;
-      st.lateList.push({ date: d.date, shift: d.shift, n: x.n, at, reason: rt });
+      if (!reasonReady(x)) st.noReason++;
+      const rs = reasonsOf(x);
+      (rs.length ? rs : ["ไม่ระบุ"]).forEach((k) => { st.reasons[k] = (st.reasons[k] || 0) + 1; });
+      st.lateList.push({ date: d.date, shift: d.shift, n: x.n, at, reason: reasonText(x) });
     });
   });
   const a = [...st.ats].sort((x, y) => x - y);
@@ -233,7 +323,7 @@ export function msgMonth(st, ym, th) {
   const L = [
     "สรุปการตรวจความพร้อม พขร. และ Activation time",
     `ประจำเดือน ${MONTHS[m - 1]} ${y + 543}`,
-    `1. ตรวจต้นเวร ${st.starts} เวร: ไม่ผ่าน ${st.startFail} เวร (ส่งตรวจ ER ${st.startEr})`,
+    `1. ตรวจต้นเวร ${st.starts} ครั้ง: ไม่ผ่าน ${st.startFail} (ส่งตรวจ ER ${st.startEr}) · ความล้าเหลือง ${st.fatYellow} แดง ${st.fatRed}`,
     `2. เป่าแอลกอฮอล์ก่อนออก ${st.runs} ครั้ง: พบมากกว่า ${th.alcMax} mg/dl ${st.alcPos} ครั้ง`,
     `3. AT ≤ ${th.atLimit} นาที ${st.within}/${st.atN} ครั้ง (${pct}%) · เฉลี่ย ${fmt(st.mean)} นาที · มัธยฐาน ${fmt(st.median)} นาที`,
   ];
@@ -244,19 +334,21 @@ export function msgMonth(st, ym, th) {
 
 export function toCSV(list, th) {
   const esc = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
-  const rows = [["ประเภท", "วันที่", "เวร", "ครั้งที่", "เวลา", "พขร.", "แอลกอฮอล์ mg/dl", "SBP", "DBP", "PR", "SpO2", "ผล", "AT (นาที)", "เหตุผล AT", "ผู้ตรวจ", "หมายเหตุ"]];
+  const rows = [["ประเภท", "วันที่", "เวร", "ครั้งที่", "เวลา", "พขร.", "แอลกอฮอล์ mg/dl", "SBP", "DBP", "PR", "SpO2",
+    "นอน 24 ชม.", "นอน 48 ชม.", "ตื่นนอน", "KSS", "ระดับความล้า", "ผล", "AT (นาที)", "เหตุผล AT", "ผู้ตรวจ", "หมายเหตุ"]];
   list.forEach((d) => {
     startsOf(d).forEach((s) => {
-      const r = evalStart(s, th);
+      const r = evalStart(s, th, d.shift);
       if (r.level === "none") return;
       rows.push(["ต้นเวร", d.date, d.shift, "", s.time, s.driver || s.rosterDriver, s.alc, s.sbp, s.dbp, s.pr, s.spo2,
-        { ok: "ผ่าน", fail: "ไม่ผ่าน", er: "ไม่ผ่าน-ส่ง ER", pending: "ไม่ครบ" }[r.level], "", "",
+        s.sleep24, s.sleep48, s.wake, s.kss, fatigueLabel(r.fat.level),
+        { ok: "ผ่าน", caution: "ผ่านแบบมีมาตรการ", fail: "ไม่ผ่าน", er: "ไม่ผ่าน-ส่ง ER", pending: "ไม่ครบ" }[r.level], "", "",
         s.assessor || s.rosterAemt, [s.note, s.substitute && `คนแทน: ${s.substitute}`].filter(Boolean).join(" · ")]);
     });
     sortedRuns(d.runs).forEach((x) => {
       blowsOf(x).forEach((b, i, arr) => {
         const isLast = i === arr.length - 1;
-        rows.push(["ก่อนออก EMS", d.date, d.shift, x.n, b.time, b.driver, b.alc, "", "", "", "",
+        rows.push(["ก่อนออก EMS", d.date, d.shift, x.n, b.time, b.driver, b.alc, "", "", "", "", "", "", "", b.kss ?? "", "",
           num(b.alc) != null && num(b.alc) > th.alcMax ? "ไม่ผ่าน" : "ผ่าน",
           isLast ? x.at : "", isLast ? reasonText(x) : "", "", ""]);
       });
@@ -284,4 +376,10 @@ export function matchNames(options, query, limit = 8) {
     .sort((x, y) => x.score - y.score || bareName(x.n).localeCompare(bareName(y.n), "th"))
     .slice(0, limit)
     .map((x) => x.n);
+}
+
+/* ── PIN (เก็บเป็น hash ไม่เก็บตัวเลขจริง) ── */
+export async function hashPin(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("driver-check:" + String(pin)));
+  return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
