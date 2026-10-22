@@ -86,9 +86,23 @@ export function awakeAtShiftEnd(wake, checkTime, shift) {
   return (sofar + left) / 60;
 }
 
+// ชั่วโมงนอนจาก เวลาเข้านอน–ตื่น + งีบ (ไม่ได้งีบ = 0); คืนก่อนหน้า (ไม่บังคับ) ใช้คิดช่วง 48 ชม.
+// ข้อมูลรุ่นแรกที่กรอก sleep24/sleep48 ตรงๆ ยังอ่านได้
+export function sleepFrom(s) {
+  s = s || {};
+  const b = toMin(s.bed), w = toMin(s.wake);
+  const main = b != null && w != null ? ((w - b + 1440) % 1440) / 60 : null;
+  const nap = num(s.nap) || 0;
+  const prev = num(s.prevNight);
+  const s24 = main != null ? main + nap : num(s.sleep24);
+  const s48 = main != null ? (prev != null ? s24 + prev : null) : num(s.sleep48);
+  return { main, nap, prev, s24, s48 };
+}
+
 export function fatigueEval(s, shift, th, nowTime) {
   s = s || {};
-  const s24 = num(s.sleep24), s48 = num(s.sleep48), kss = num(s.kss);
+  const sl = sleepFrom(s);
+  const s24 = sl.s24, s48 = sl.s48, kss = num(s.kss);
   const obs = s.obs || {};
   const awake = awakeAtShiftEnd(s.wake, s.time || nowTime, shift);
   const rules = [
@@ -112,7 +126,7 @@ export function fatigueEval(s, shift, th, nowTime) {
   else if (s24 == null || kss == null) level = "pending";
   else level = "green";
   if (s24 == null && s48 == null && kss == null && !obsList.length) level = "none";
-  return { level, rules, awake, kss, reasons, sleepFails };
+  return { level, rules, awake, kss, reasons, sleepFails, sleep: sl };
 }
 
 /* ── ต้นเวร ── */
@@ -146,7 +160,7 @@ export function evalStart(s, th, shift) {
   if (alc == null) missing.push("แอลกอฮอล์");
   if (sbp == null || dbp == null) missing.push("BP");
   if (pr == null) missing.push("PR");
-  if (num(s.sleep24) == null) missing.push("ชั่วโมงนอน");
+  if (sleepFrom(s).s24 == null) missing.push("เวลาเข้านอน/ตื่นนอน");
   if (num(s.kss) == null) missing.push("KSS");
   if (!s.fit) missing.push("ความเห็นผู้ตรวจ");
   if (missing.length) return { level: "pending", items: missing, fat, caution };
@@ -175,7 +189,11 @@ export function msgStart(date, shift, s, r, names) {
   if (names.driver) L.push(`พขร. ${names.driver}`);
   L.push(`1. ปริมาณแอลกอฮอล์ ${s.alc ?? "-"} mg/dl`);
   L.push(`2. BP ${s.sbp ?? "-"}/${s.dbp ?? "-"} mmHg  PR ${s.pr ?? "-"} /min${s.spo2 != null && s.spo2 !== "" ? `  SpO2 ${s.spo2}%` : ""}`);
-  L.push(`3. ความล้า: นอน 24 ชม. ${s.sleep24 ?? "-"} ชม. / 48 ชม. ${s.sleep48 ?? "-"} ชม. · KSS ${s.kss ?? "-"} · ระดับ${fatigueLabel(fat.level)}`);
+  const sl = sleepFrom(s);
+  const sleepTxt = s.bed && s.wake
+    ? `นอน ${s.bed}–${s.wake}${sl.nap ? ` + งีบ ${fmt(sl.nap)} ชม.` : ""} = ${fmt(sl.s24)} ชม.${sl.prev != null ? ` (คืนก่อน ${fmt(sl.prev)} ชม.)` : ""}`
+    : `นอน 24 ชม. ${fmt(sl.s24)} ชม.`;
+  L.push(`3. ความล้า: ${sleepTxt} · KSS ${s.kss ?? "-"} · ระดับ${fatigueLabel(fat.level)}`);
   const res = {
     ok: "พร้อมปฏิบัติงาน",
     caution: "ปฏิบัติงานได้ แต่ต้องมีมาตรการลดความล้า",
@@ -335,20 +353,20 @@ export function msgMonth(st, ym, th) {
 export function toCSV(list, th) {
   const esc = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
   const rows = [["ประเภท", "วันที่", "เวร", "ครั้งที่", "เวลา", "พขร.", "แอลกอฮอล์ mg/dl", "SBP", "DBP", "PR", "SpO2",
-    "นอน 24 ชม.", "นอน 48 ชม.", "ตื่นนอน", "KSS", "ระดับความล้า", "ผล", "AT (นาที)", "เหตุผล AT", "ผู้ตรวจ", "หมายเหตุ"]];
+    "เข้านอน", "ตื่นนอน", "งีบ (ชม.)", "นอน 24 ชม.", "นอน 48 ชม.", "KSS", "ระดับความล้า", "ผล", "AT (นาที)", "เหตุผล AT", "ผู้ตรวจ", "หมายเหตุ"]];
   list.forEach((d) => {
     startsOf(d).forEach((s) => {
       const r = evalStart(s, th, d.shift);
       if (r.level === "none") return;
       rows.push(["ต้นเวร", d.date, d.shift, "", s.time, s.driver || s.rosterDriver, s.alc, s.sbp, s.dbp, s.pr, s.spo2,
-        s.sleep24, s.sleep48, s.wake, s.kss, fatigueLabel(r.fat.level),
+        s.bed, s.wake, s.nap, fmt(r.fat.sleep.s24), r.fat.sleep.s48 == null ? "" : fmt(r.fat.sleep.s48), s.kss, fatigueLabel(r.fat.level),
         { ok: "ผ่าน", caution: "ผ่านแบบมีมาตรการ", fail: "ไม่ผ่าน", er: "ไม่ผ่าน-ส่ง ER", pending: "ไม่ครบ" }[r.level], "", "",
         s.assessor || s.rosterAemt, [s.note, s.substitute && `คนแทน: ${s.substitute}`].filter(Boolean).join(" · ")]);
     });
     sortedRuns(d.runs).forEach((x) => {
       blowsOf(x).forEach((b, i, arr) => {
         const isLast = i === arr.length - 1;
-        rows.push(["ก่อนออก EMS", d.date, d.shift, x.n, b.time, b.driver, b.alc, "", "", "", "", "", "", "", b.kss ?? "", "",
+        rows.push(["ก่อนออก EMS", d.date, d.shift, x.n, b.time, b.driver, b.alc, "", "", "", "", "", "", "", "", "", b.kss ?? "", "",
           num(b.alc) != null && num(b.alc) > th.alcMax ? "ไม่ผ่าน" : "ผ่าน",
           isLast ? x.at : "", isLast ? reasonText(x) : "", "", ""]);
       });
