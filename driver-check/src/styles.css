@@ -166,3 +166,11 @@ details summary { cursor: pointer; font-weight: 700; min-height: 32px; }
 .kss.compact button[aria-pressed=true] b { color: #fff; }
 .sleepsum { font-size: 14.5px; background: var(--field); border-radius: 10px; padding: 8px 12px; }
 .ac-h { position: sticky; top: 0; background: var(--chip); color: var(--muted); font-size: 12px; font-weight: 700; padding: 6px 14px; }
+
+/* แชร์ LINE + แถบออฟไลน์ */
+a.btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn.line { background: #06c755; color: #fff; }
+.btn.line:hover { background: #05b04b; color: #fff; }
+.offline { display: flex; flex-direction: column; gap: 2px; background: var(--chip); color: var(--ink); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.offline.bad { background: var(--bad-solid); color: #fff; }
+.offline b { font-size: 14px; }

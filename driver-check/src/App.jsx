@@ -144,12 +144,23 @@ function NameEdit({ id, initial, options, onSave, onCancel, saveLabel = "บั�
   );
 }
 
+// แชร์เข้า LINE: เปิดหน้า "แชร์ไปที่" ของ LINE ให้เลือกกลุ่มได้เลย (LINE URL scheme)
+const lineShareUrl = (text) => "https://line.me/R/share?text=" + encodeURIComponent(text);
+const LineIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 .9l-.1.9c0 .3-.2 1 .9.6 1.1-.5 6-3.5 8.2-6 1.5-1.6 2.2-3.3 2.2-4.8C22.4 6.6 17.5 3 12 3z" />
+  </svg>
+);
+
 function Msg({ title, text, toast }) {
   return (
     <section className="card msg">
       <div className="row">
         <span className="eyebrow">{title}</span>
-        <button type="button" className="btn pri sm" onClick={() => copyText(text, toast)}>คัดลอก</button>
+        <div className="row" style={{ gap: 6 }}>
+          <button type="button" className="btn soft sm" onClick={() => copyText(text, toast)}>คัดลอก</button>
+          <a className="btn line sm" href={lineShareUrl(text)} target="_blank" rel="noopener noreferrer"><LineIcon />แชร์ LINE</a>
+        </div>
       </div>
       <pre>{text}</pre>
     </section>
@@ -232,9 +243,20 @@ export default function App() {
   const tt = useRef();
   const toast = (m) => { setToastMsg(m); clearTimeout(tt.current); tt.current = setTimeout(() => setToastMsg(""), 2200); };
 
-  const save = (patch) =>
-    update(ref(db, `driverCheck/${key}`), { ...patch, date, shift, updatedAt: Date.now() })
-      .catch(() => toast("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง"));
+  // นับข้อมูลที่ยังส่งไม่ถึง Firebase (ค้างอยู่ในหน่วยความจำของแอประหว่างออฟไลน์)
+  const [pending, setPending] = useState(0);
+  const save = (patch) => {
+    setPending((n) => n + 1);
+    return update(ref(db, `driverCheck/${key}`), { ...patch, date, shift, updatedAt: Date.now() })
+      .catch(() => toast("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง"))
+      .finally(() => setPending((n) => Math.max(0, n - 1)));
+  };
+  useEffect(() => {
+    if (!pending) return undefined;
+    const h = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [pending]);
 
   const start = (doc && doc.start) || {};
   const r = roster || {};
@@ -279,7 +301,7 @@ export default function App() {
             <b>EMS Driver Check</b>
             <small>เป่าแอลกอฮอล์ · ความพร้อม พขร. · AT</small>
           </div>
-          <span className={"conn " + (conn ? "on" : "off")}>{conn ? "ออนไลน์" : "ออฟไลน์ · จะส่งเมื่อมีเน็ต"}</span>
+          <span className={"conn " + (conn ? "on" : "off")}>{conn ? "ออนไลน์" : "ออฟไลน์"}</span>
         </div>
         <div className="shiftbar">
           <label className="sr" htmlFor="date">วันที่เวร</label>
@@ -291,6 +313,13 @@ export default function App() {
           </div>
         </div>
         {shift === "ดึก" && <div className="sub">เวรดึก 00:15–08:14 นับเป็นของวันก่อนหน้า (เหมือน ems-check)</div>}
+        {conn === false && (
+          <div className={"offline " + (pending ? "bad" : "")} role="alert">
+            {pending
+              ? <><b>มีข้อมูลรอส่ง {pending} รายการ · อย่าปิดหรือรีเฟรชแอป</b><span>ข้อมูลจะส่งเองเมื่อเน็ตกลับมา ถ้าปิดแอปตอนนี้ข้อมูลชุดนี้จะหาย</span></>
+              : <><b>ออฟไลน์</b><span>กรอกต่อได้ แต่อย่าปิดแอปจนกว่าจะขึ้นว่าออนไลน์</span></>}
+          </div>
+        )}
         <nav className="tabs" role="tablist">
           {[["start", "ต้นเวร", startDot], ["before", "ก่อนออก", beforeDot], ["after", "หลังออก", afterCount || ""], ["summary", "สรุป", ""]].map(([id, label, dot]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => goTab(id)}>
