@@ -322,14 +322,14 @@ export function msgAlc(date, shift, runs, th) {
 }
 
 export function msgAt(date, shift, runs, th) {
-  const L = [`เวร${shift}`, thaiDate(date)];
+  const L = ["รายงาน Activation time (รายครั้ง)", `วันที่: ${thaiDate(date)}`, `เวร: ${shift}`];
   let any = false;
   runs.forEach((r) => {
     const at = num(r.at);
     if (at == null) return;
     any = true;
-    const why = at > th.atLimit ? (reasonText(r) ? ` เนื่องจาก${reasonText(r)}` : " (ยังไม่ระบุเหตุผล)") : "";
-    L.push(`ครั้งที่ ${r.n} = AT ${fmt(at)} min${why}`);
+    const why = at > th.atLimit ? ` (${reasonText(r) || "ยังไม่ระบุเหตุผล"})` : "";
+    L.push(`ครั้งที่ ${r.n} = ${fmt(at)} นาที${why}`);
   });
   if (!any) L.push("(ยังไม่ได้กรอก AT)");
   return L.join("\n");
