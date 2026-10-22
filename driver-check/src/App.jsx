@@ -67,6 +67,9 @@ async function copyText(text, toast) {
   }
 }
 
+// true ระหว่างที่กำลังพิมพ์ในช่องใดช่องหนึ่ง (ยังไม่ออกจากช่อง) ใช้เลื่อน alarm ไปหลังกรอกเสร็จ
+let typing = false;
+
 // ช่องกรอกที่บันทึกเองหลังหยุดพิมพ์ และไม่โดนค่าจากเครื่องอื่นทับตอนกำลังพิมพ์
 function Field({ value, onCommit, onFinal, numeric, className = "inp", ...rest }) {
   const [v, setV] = useState(value ?? "");
@@ -94,10 +97,11 @@ function Field({ value, onCommit, onFinal, numeric, className = "inp", ...rest }
       inputMode={numeric ? "decimal" : rest.inputMode}
       autoComplete="off"
       onFocus={() => { focused.current = true; }}
-      onBlur={(e) => { focused.current = false; commit(e.target.value); onFinal && onFinal(e.target.value); }}
+      onBlur={(e) => { focused.current = false; typing = false; commit(e.target.value); onFinal && onFinal(e.target.value); }}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       onChange={(e) => {
         const x = e.target.value;
+        typing = true;
         setV(x);
         clearTimeout(timer.current);
         timer.current = setTimeout(() => commit(x), 600);
@@ -149,6 +153,41 @@ function Msg({ title, text, toast }) {
       <pre>{text}</pre>
     </section>
   );
+}
+
+// เสียงเตือน + สั่น (มือถือที่รองรับ) ใช้ตอนพบค่าที่ไม่ผ่าน
+let audioCtx = null;
+function getAudio() {
+  try {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    if (!audioCtx) audioCtx = new C();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  } catch { return null; }
+}
+if (typeof window !== "undefined") {
+  // iPhone ยอมให้เล่นเสียงหลังจากผู้ใช้แตะหน้าจอแล้วเท่านั้น
+  window.addEventListener("pointerdown", () => getAudio(), { once: true, passive: true });
+}
+function alarm() {
+  try { if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]); } catch { /* ignore */ }
+  const ctx = getAudio();
+  if (!ctx) return;
+  try {
+    [0, 0.35, 0.7].forEach((t) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      const at = ctx.currentTime + t;
+      o.type = "square";
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.2, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
+      o.connect(g).connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 0.27);
+    });
+  } catch { /* ignore */ }
 }
 
 const WarnIcon = ({ color = "#fff" }) => (
@@ -262,7 +301,7 @@ export default function App() {
 
       <main className="main">
         {tab !== "summary" && loading && <div className="empty">กำลังโหลด…</div>}
-        {tab === "start" && !loading && <StartTab {...common} start={start} saveStart={saveStart} />}
+        {tab === "start" && !loading && <StartTab key={key} {...common} start={start} saveStart={saveStart} />}
         {tab === "before" && !loading && <BeforeTab {...common} dbKey={key} />}
         {tab === "after" && !loading && <AfterTab {...common} />}
         {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} />}
@@ -289,6 +328,29 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
 
   const toggle = (k, v) => saveStart({ [k]: start[k] === v ? null : v });
   const [missing, setMissing] = useState(false);
+  // alarm เมื่อมีข้อไม่ผ่านใหม่ (ข้อที่มีอยู่แล้วตอนเปิดหน้าไม่เตือนซ้ำ)
+  const issues = L.startIssues(start, th, shift);
+  const issueSig = issues.map((i) => i.key).join("|");
+  const acked = useRef(null);
+  const [alarmItems, setAlarmItems] = useState(null);
+  // รอให้กรอกช่องเสร็จก่อน (ออกจากช่อง) ไม่เตือนระหว่างพิมพ์ เช่น พิมพ์ SBP "1" ก่อนจะเป็น "120"
+  const [blurTick, setBlurTick] = useState(0);
+  useEffect(() => {
+    const h = () => setTimeout(() => setBlurTick((t) => t + 1), 0);
+    document.addEventListener("focusout", h);
+    return () => document.removeEventListener("focusout", h);
+  }, []);
+  useEffect(() => {
+    const keys = issues.map((i) => i.key);
+    if (acked.current === null) { acked.current = new Set(keys); return; }
+    if (typing) return;
+    [...acked.current].forEach((k) => { if (!keys.includes(k)) acked.current.delete(k); });
+    const fresh = issues.filter((i) => !acked.current.has(i.key));
+    if (!fresh.length) return;
+    fresh.forEach((i) => acked.current.add(i.key));
+    setAlarmItems((prev) => [...(prev || []), ...fresh]);
+    alarm();
+  }, [issueSig, blurTick]); // eslint-disable-line react-hooks/exhaustive-deps
   function confirm() {
     if (res.level === "pending" || res.level === "none") { setMissing(true); return; }
     saveStart({ confirmed: true, confirmedAt: hhmm() });
@@ -354,7 +416,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           <label className={"fld" + (f.pr ? " bad" : "")}>PR (/min)
             <Field numeric className="inp big" placeholder="80" value={start.pr} onCommit={(v) => saveStart({ pr: v })} />
           </label>
-          <label className="fld">SpO₂ (%) · ไม่บังคับ
+          <label className={"fld" + (f.spo2 ? " bad" : "")}>SpO₂ (%)
             <Field numeric className="inp big" placeholder="-" value={start.spo2} onCommit={(v) => saveStart({ spo2: v })} />
           </label>
         </div>
@@ -375,7 +437,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           <label className="fld">งีบ (ชม.) · ไม่ได้งีบใส่ 0
             <Field numeric className="inp big" placeholder="0" value={start.nap} onCommit={(v) => saveStart({ nap: v })} />
           </label>
-          <label className="fld">คืนก่อนหน้า นอน (ชม.) · ไม่บังคับ
+          <label className={"fld" + (fat.rules[1].fail ? " bad" : "")}>คืนก่อนหน้า นอน (ชม.)
             <Field numeric className="inp big" placeholder="-" value={start.prevNight} onCommit={(v) => saveStart({ prevNight: v })} />
           </label>
         </div>
@@ -397,7 +459,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
             ))}
           </div>
         ) : (
-          <span className="sub">ถ้าใส่ชั่วโมงนอนคืนก่อนหน้า แอปจะเช็กการนอนสะสม 48 ชม. และชั่วโมงที่ตื่นถึงจบเวรให้ด้วย</span>
+          <span className="sub">ใส่ชั่วโมงนอนคืนก่อนหน้า เพื่อเช็กการนอนสะสม 48 ชม. และชั่วโมงที่ตื่นถึงจบเวร</span>
         )}
       </section>
 
@@ -474,6 +536,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
         <button type="button" className="btn pri" onClick={confirm}>ยืนยันผลตรวจต้นเวร</button>
       )}
       {missing && <MissingDialog items={res.items} onBack={() => setMissing(false)} />}
+      {alarmItems && !missing && <StartAlarm items={alarmItems} res={res} onClose={() => setAlarmItems(null)} />}
     </>
   );
 }
@@ -496,8 +559,51 @@ function FatigueBadge({ fat }) {
 
 const CAUTION_STEPS = ["แจ้งทีมที่ออกด้วยกันให้ช่วยสังเกต", "ถามคะแนน KSS ซ้ำก่อนออก EMS ทุกครั้ง", "ช่วงว่างให้พักหรืองีบสั้นได้"];
 
+const SEV = { er: ["p-bad", "ส่ง ER"], fail: ["p-bad", "ไม่ผ่าน"], warn: ["p-warn", "เฝ้าระวัง"] };
+function StartAlarm({ items, res, onClose }) {
+  const worst = items.some((i) => i.sev === "er") ? "er" : items.some((i) => i.sev === "fail") ? "fail" : "warn";
+  const overall = res.level === "er" ? "er" : res.level === "fail" ? "fail" : worst === "warn" ? "warn" : worst;
+  const head = {
+    er: ["var(--bad-solid)", "ไม่ผ่าน · พิจารณาเปิดบัตรตรวจ ER"],
+    fail: ["var(--bad-solid)", "ไม่ผ่าน · ห้ามขับ ให้เปลี่ยน พขร."],
+    warn: ["var(--warn-solid)", "พบความเสี่ยงความล้า"],
+  }[overall];
+  const steps = overall === "er"
+    ? ["รายงาน พอป. ประจำเวร", "แจ้งกลุ่มงานบริหารทั่วไป ให้เปลี่ยน พขร.", "เปิดบัตรและนำเข้าตรวจที่ ER"]
+    : overall === "fail"
+      ? ["รายงาน พอป. ประจำเวร", "แจ้งกลุ่มงานบริหารทั่วไป ให้เปลี่ยน พขร."]
+      : ["ถ้ารวมกับข้ออื่นอาจกลายเป็นระดับแดง", "ถ้าผ่านแบบเหลือง: ให้ทีมช่วยสังเกต และถาม KSS ซ้ำก่อนออกทุกครั้ง"];
+  return (
+    <div className="overlay" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="alarm-h">
+        <div className="head" style={{ background: head[0] }}>
+          <div className="row" style={{ justifyContent: "flex-start", gap: 10 }}>
+            <WarnIcon /><b id="alarm-h">{head[1]}</b>
+          </div>
+        </div>
+        <div className="body">
+          <b style={{ fontSize: 15 }}>พบ</b>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {items.map((i) => (
+              <div key={i.key} className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+                <span style={{ fontSize: 15 }}>{i.text}</span>
+                <span className={"pill " + SEV[i.sev][0]}>{SEV[i.sev][1]}</span>
+              </div>
+            ))}
+          </div>
+          <b style={{ fontSize: 15 }}>สิ่งที่ต้องทำ</b>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14.5, lineHeight: 1.7 }}>{steps.map((t) => <li key={t}>{t}</li>)}</ul>
+        </div>
+        <div className="foot">
+          <button type="button" className={"btn " + (overall === "warn" ? "pri" : "danger")} autoFocus onClick={onClose}>รับทราบ</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MissingDialog({ items, onBack, onSkip, skipLabel }) {
-  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "ชั่วโมงนอน", "KSS", "ความเห็นผู้ตรวจ"];
+  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "SpO₂", "เวลาเข้านอน", "เวลาตื่นนอน", "ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)", "ชั่วโมงนอนคืนก่อนหน้า", "KSS", "ความเห็นผู้ตรวจ"];
   return (
     <div className="overlay" onKeyDown={(e) => { if (e.key === "Escape") onBack(); }}>
       <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="miss-h">
@@ -567,6 +673,7 @@ function BeforeTab({ date, shift, th, save, toast, names, staff, runs, dbKey }) 
     setWho(null);
     setKss(null);
     setKssWarn(kss != null && kss >= th.kssWarn ? { n: nextN, kss, stop: kss >= th.kssStop, driver } : null);
+    if (v > th.alcMax || (kss != null && kss >= th.kssWarn)) alarm();
     if (v > th.alcMax) setAlertId(id);
     else toast(`บันทึกครั้งที่ ${nextN} แล้ว · ผ่าน`);
   }
@@ -732,7 +839,7 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons }) {
             <label className={"fld" + (late ? " warn" : "")}>AT (นาที)
               <Field numeric className="inp big" placeholder="ดูจากสถิติแล้วกรอก" value={x.at}
                 onCommit={(v) => save({ [`runs/${x.id}/at`]: v })}
-                onFinal={(v) => { const n = num(v); if (n != null && n > th.atLimit && !L.reasonReady(x)) setSheetId(x.id); }} />
+                onFinal={(v) => { const n = num(v); if (n != null && n > th.atLimit && !L.reasonReady(x)) { setSheetId(x.id); alarm(); } }} />
             </label>
             {late && (
               <>

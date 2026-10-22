@@ -10,7 +10,7 @@ export const TH_DEF = {
   alcMax: 0, atLimit: 2,
   sbpLow: 90, sbpHigh: 160, sbpCrisis: 180,
   dbpHigh: 100, dbpCrisis: 120,
-  prLow: 50, prHigh: 110, prCrisis: 130,
+  prLow: 50, prHigh: 110, prCrisis: 130, spo2Low: 94,
   sleep24Min: 5, sleep48Min: 12, kssWarn: 7, kssStop: 8,
 };
 export const TH_LABEL = {
@@ -24,6 +24,7 @@ export const TH_LABEL = {
   prLow: "PR ต่ำกว่า → ส่ง ER",
   prHigh: "PR มากกว่า → ไม่ผ่าน",
   prCrisis: "PR ตั้งแต่ → ส่ง ER",
+  spo2Low: "SpO₂ ต่ำกว่า → ไม่ผ่าน",
   sleep24Min: "นอนใน 24 ชม. ขั้นต่ำ (ชม.)",
   sleep48Min: "นอนใน 48 ชม. ขั้นต่ำ (ชม.)",
   kssWarn: "KSS ตั้งแต่ → เหลือง",
@@ -123,7 +124,7 @@ export function fatigueEval(s, shift, th, nowTime) {
   let level;
   if (kssStop || count >= 2) level = "red";
   else if (count === 1) level = "yellow";
-  else if (s24 == null || kss == null) level = "pending";
+  else if (s24 == null || s48 == null || kss == null) level = "pending";
   else level = "green";
   if (s24 == null && s48 == null && kss == null && !obsList.length) level = "none";
   return { level, rules, awake, kss, reasons, sleepFails, sleep: sl };
@@ -132,7 +133,7 @@ export function fatigueEval(s, shift, th, nowTime) {
 /* ── ต้นเวร ── */
 export function evalStart(s, th, shift) {
   s = s || {};
-  const alc = num(s.alc), sbp = num(s.sbp), dbp = num(s.dbp), pr = num(s.pr);
+  const alc = num(s.alc), sbp = num(s.sbp), dbp = num(s.dbp), pr = num(s.pr), spo2 = num(s.spo2);
   const fat = fatigueEval(s, shift, th);
   if (alc == null && sbp == null && dbp == null && pr == null && fat.level === "none") return { level: "none", items: [], fat };
   const fail = [], er = [], caution = [];
@@ -151,6 +152,7 @@ export function evalStart(s, th, shift) {
     else if (pr >= th.prCrisis) er.push(`PR ${pr} เร็วมาก`);
     else if (pr > th.prHigh) fail.push(`PR ${pr} เร็ว`);
   }
+  if (spo2 != null && spo2 < th.spo2Low) fail.push(`SpO2 ${spo2}% ต่ำ`);
   if (fat.level === "red") fail.push(`ความล้าระดับแดง (${fat.reasons.join(", ")})`);
   if (fat.level === "yellow") caution.push(`ความล้าระดับเหลือง (${fat.reasons.join(", ")})`);
   if (s.fit === "unfit") fail.push("ผู้ตรวจประเมินว่าไม่เหมาะสมต่อการขับ");
@@ -160,7 +162,11 @@ export function evalStart(s, th, shift) {
   if (alc == null) missing.push("แอลกอฮอล์");
   if (sbp == null || dbp == null) missing.push("BP");
   if (pr == null) missing.push("PR");
-  if (sleepFrom(s).s24 == null) missing.push("เวลาเข้านอน/ตื่นนอน");
+  if (spo2 == null) missing.push("SpO₂");
+  if (!s.bed) missing.push("เวลาเข้านอน");
+  if (!s.wake) missing.push("เวลาตื่นนอน");
+  if (num(s.nap) == null) missing.push("ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)");
+  if (num(s.prevNight) == null) missing.push("ชั่วโมงนอนคืนก่อนหน้า");
   if (num(s.kss) == null) missing.push("KSS");
   if (!s.fit) missing.push("ความเห็นผู้ตรวจ");
   if (missing.length) return { level: "pending", items: missing, fat, caution };
@@ -168,11 +174,44 @@ export function evalStart(s, th, shift) {
   return { level: "ok", items: [], fat };
 }
 
+// รายการที่ไม่ผ่านทีละข้อ ใช้ขึ้น alarm เมื่อมีข้อใหม่ (sev: er = ส่ง ER, fail = เปลี่ยน พขร., warn = เฝ้าระวัง)
+export function startIssues(s, th, shift) {
+  s = s || {};
+  const out = [];
+  const add = (key, text, sev) => out.push({ key, text, sev });
+  const alc = num(s.alc), sbp = num(s.sbp), dbp = num(s.dbp), pr = num(s.pr), spo2 = num(s.spo2), kss = num(s.kss);
+  if (alc != null && alc > th.alcMax) add("alc", `แอลกอฮอล์ ${alc} mg/dl`, "fail");
+  if (sbp != null) {
+    if (sbp < th.sbpLow) add("sbpLow", `SBP ${sbp} ต่ำ (สงสัยภาวะ shock)`, "er");
+    else if (sbp >= th.sbpCrisis) add("sbpCrisis", `SBP ${sbp} สูงมาก (สงสัย hypertensive emergency)`, "er");
+    else if (sbp >= th.sbpHigh) add("sbpHigh", `SBP ${sbp} สูง`, "fail");
+  }
+  if (dbp != null) {
+    if (dbp >= th.dbpCrisis) add("dbpCrisis", `DBP ${dbp} สูงมาก`, "er");
+    else if (dbp >= th.dbpHigh) add("dbpHigh", `DBP ${dbp} สูง`, "fail");
+  }
+  if (pr != null) {
+    if (pr < th.prLow) add("prLow", `PR ${pr} ช้า (bradycardia)`, "er");
+    else if (pr >= th.prCrisis) add("prCrisis", `PR ${pr} เร็วมาก`, "er");
+    else if (pr > th.prHigh) add("prHigh", `PR ${pr} เร็ว`, "fail");
+  }
+  if (spo2 != null && spo2 < th.spo2Low) add("spo2", `SpO2 ${spo2}% ต่ำ`, "fail");
+  const fat = fatigueEval(s, shift, th);
+  fat.rules.forEach((r) => { if (r.fail) add("sleep_" + r.id, `${r.label} ไม่ผ่าน (${fmt(r.value)})`, "warn"); });
+  if (kss != null && kss >= th.kssStop) add("kssStop", `KSS ${kss} ง่วงมาก`, "fail");
+  else if (kss != null && kss >= th.kssWarn) add("kssWarn", `KSS ${kss} เริ่มง่วง`, "warn");
+  OBS.forEach(([k, t]) => { if ((s.obs || {})[k]) add("obs_" + k, t, "warn"); });
+  if (fat.level === "red" && !out.some((x) => x.key === "kssStop")) add("fatRed", "ความล้ารวมระดับแดง ไม่ควรขับ", "fail");
+  if (s.fit === "unfit") add("unfit", "ผู้ตรวจประเมินว่าไม่เหมาะสมต่อการขับ", "fail");
+  return out;
+}
+
 // ค่าผิดปกติรายช่อง สำหรับทำสีช่องกรอก
 export function vitalFlags(s, th) {
   s = s || {};
-  const alc = num(s.alc), sbp = num(s.sbp), dbp = num(s.dbp), pr = num(s.pr);
+  const alc = num(s.alc), sbp = num(s.sbp), dbp = num(s.dbp), pr = num(s.pr), spo2 = num(s.spo2);
   return {
+    spo2: spo2 != null && spo2 < th.spo2Low,
     alc: alc != null && alc > th.alcMax,
     bp: (sbp != null && (sbp < th.sbpLow || sbp >= th.sbpHigh)) || (dbp != null && dbp >= th.dbpHigh),
     pr: pr != null && (pr < th.prLow || pr > th.prHigh),
