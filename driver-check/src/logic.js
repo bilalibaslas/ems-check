@@ -168,6 +168,7 @@ export function evalStart(s, th, shift) {
   if (num(s.nap) == null) missing.push("ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)");
   if (num(s.prevNight) == null) missing.push("ชั่วโมงนอนคืนก่อนหน้า");
   if (num(s.kss) == null) missing.push("KSS");
+  if (!s.dress) missing.push("การแต่งกาย");
   if (!s.fit) missing.push("ความเห็นผู้ตรวจ");
   if (missing.length) return { level: "pending", items: missing, fat, caution };
   if (caution.length) return { level: "caution", items: caution, fat };
@@ -203,6 +204,7 @@ export function startIssues(s, th, shift) {
   OBS.forEach(([k, t]) => { if ((s.obs || {})[k]) add("obs_" + k, t, "warn"); });
   if (fat.level === "red" && !out.some((x) => x.key === "kssStop")) add("fatRed", "ความล้ารวมระดับแดง ไม่ควรขับ", "fail");
   if (s.fit === "unfit") add("unfit", "ผู้ตรวจประเมินว่าไม่เหมาะสมต่อการขับ", "fail");
+  if (s.dress === "bad") add("dress", "การแต่งกายไม่สะอาด/ไม่เรียบร้อย", "warn");
   return out;
 }
 
@@ -244,6 +246,7 @@ export function msgStart(date, shift, s, r, names) {
   const a = s.actions || {};
   const done = [a.po && "รายงาน พอป.", a.admin && "แจ้งฝ่ายบริหาร", a.er && "ส่งตรวจ ER"].filter(Boolean);
   if (done.length) L.push(`ดำเนินการแล้ว: ${done.join(", ")}`);
+  if (s.dress === "bad") L.push("การแต่งกาย: ไม่สะอาด/ไม่เรียบร้อย");
   if (s.substitute) L.push(`พขร. ที่มาแทน: ${s.substitute}`);
   if (s.note) L.push(`หมายเหตุ: ${s.note}`);
   if (names.assessor) L.push(`ผู้ตรวจ: ${names.assessor}`);
@@ -317,6 +320,26 @@ export function msgAt(date, shift, runs, th) {
   return L.join("\n");
 }
 
+/* ── ไม่มาประเมิน ── */
+// เวลาจบเวรจริง (วันเวลา) — ดึกและบ่ายจบในวันถัดไป
+export function shiftEndDate(date, shift) {
+  const [y, m, d] = date.split("-").map(Number);
+  const end = SHIFT_END[shift];
+  const nextDay = shift !== "เช้า";
+  return new Date(y, m - 1, d + (nextDay ? 1 : 0), Math.floor(end / 60), end % 60);
+}
+export const shiftEnded = (date, shift, now = new Date()) => now >= shiftEndDate(date, shift);
+// พขร. ประเมินต้นเวรตอนเวรเช้า และเวรบ่าย (บ่าย/ดึกเป็นคนเดียวกัน) จึงไม่นับเวรดึก
+export const ASSESS_SHIFTS = ["เช้า", "บ่าย"];
+export function noShows(rosterMap, list, th, now = new Date()) {
+  const done = new Set(list.filter((d) => startsOf(d).some((s) => evalStart(s, th, d.shift).level !== "none")).map((d) => `${d.date}_${d.shift}`));
+  return Object.entries(rosterMap || {})
+    .map(([k, r]) => ({ key: k, date: k.slice(0, 10), shift: k.slice(11), driver: (r && r.driv) || "" }))
+    .filter((x) => x.driver && ASSESS_SHIFTS.includes(x.shift) && /^\d{4}-\d{2}-\d{2}$/.test(x.date))
+    .filter((x) => shiftEnded(x.date, x.shift, now) && !done.has(x.key))
+    .sort((a, b) => (a.key < b.key ? -1 : 1));
+}
+
 /* ── สรุปเดือน ── */
 // ผลตรวจต้นเวรทั้งหมดของเวร: รอบที่ไม่ผ่านแล้วเปลี่ยนคน (startPrev) + รอบปัจจุบัน
 export function startsOf(d) {
@@ -326,7 +349,7 @@ export function startsOf(d) {
 
 export function summarize(list, th) {
   const st = {
-    shifts: list.length, starts: 0, startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
+    shifts: list.length, starts: 0, dressBad: 0, startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
     runs: 0, departed: 0, alcPos: 0, atN: 0, within: 0, noReason: 0, pendingAt: 0,
     ats: [], reasons: {}, lateList: [],
     byShift: Object.fromEntries(SHIFTS.map((s) => [s, { runs: 0, atN: 0, sum: 0, late: 0 }])),
@@ -339,6 +362,7 @@ export function summarize(list, th) {
         if (r.level === "fail") st.startFail++;
         if (r.level === "er") { st.startFail++; st.startEr++; }
       }
+      if (s.dress === "bad") st.dressBad++;
       if (r.fat.level === "yellow") st.fatYellow++;
       if (r.fat.level === "red") st.fatRed++;
       if (num(s.alc) != null && num(s.alc) > th.alcMax) st.startAlc++;
@@ -374,7 +398,7 @@ export function summarize(list, th) {
   return st;
 }
 
-export function msgMonth(st, ym, th) {
+export function msgMonth(st, ym, th, noShowCount = 0) {
   const [y, m] = ym.split("-").map(Number);
   const pct = st.atN ? Math.round((st.within / st.atN) * 100) : 0;
   const L = [
@@ -384,32 +408,36 @@ export function msgMonth(st, ym, th) {
     `2. เป่าแอลกอฮอล์ก่อนออก ${st.runs} ครั้ง: พบมากกว่า ${th.alcMax} mg/dl ${st.alcPos} ครั้ง`,
     `3. AT ≤ ${th.atLimit} นาที ${st.within}/${st.atN} ครั้ง (${pct}%) · เฉลี่ย ${fmt(st.mean)} นาที · มัธยฐาน ${fmt(st.median)} นาที`,
   ];
+  L.push(`4. ไม่มาประเมินต้นเวร ${noShowCount} เวร · การแต่งกายไม่เรียบร้อย ${st.dressBad} ครั้ง`);
   const rs = Object.entries(st.reasons).sort((a, b) => b[1] - a[1]);
-  if (rs.length) L.push(`4. เหตุผลที่ AT เกิน ${th.atLimit} นาที: ` + rs.map(([k, n]) => `${k} ${n}`).join(", "));
+  if (rs.length) L.push(`5. เหตุผลที่ AT เกิน ${th.atLimit} นาที: ` + rs.map(([k, n]) => `${k} ${n}`).join(", "));
   return L.join("\n");
 }
 
-export function toCSV(list, th) {
+export function toCSV(list, th, noShowList = []) {
   const esc = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
   const rows = [["ประเภท", "วันที่", "เวร", "ครั้งที่", "เวลา", "พขร.", "แอลกอฮอล์ mg/dl", "SBP", "DBP", "PR", "SpO2",
-    "เข้านอน", "ตื่นนอน", "งีบ (ชม.)", "นอน 24 ชม.", "นอน 48 ชม.", "KSS", "ระดับความล้า", "ผล", "AT (นาที)", "เหตุผล AT", "ผู้ตรวจ", "หมายเหตุ"]];
+    "เข้านอน", "ตื่นนอน", "งีบ (ชม.)", "นอน 24 ชม.", "นอน 48 ชม.", "KSS", "ระดับความล้า", "แต่งกาย", "ผล", "AT (นาที)", "เหตุผล AT", "ผู้ตรวจ", "หมายเหตุ"]];
   list.forEach((d) => {
     startsOf(d).forEach((s) => {
       const r = evalStart(s, th, d.shift);
       if (r.level === "none") return;
       rows.push(["ต้นเวร", d.date, d.shift, "", s.time, s.driver || s.rosterDriver, s.alc, s.sbp, s.dbp, s.pr, s.spo2,
-        s.bed, s.wake, s.nap, fmt(r.fat.sleep.s24), r.fat.sleep.s48 == null ? "" : fmt(r.fat.sleep.s48), s.kss, fatigueLabel(r.fat.level),
+        s.bed, s.wake, s.nap, fmt(r.fat.sleep.s24), r.fat.sleep.s48 == null ? "" : fmt(r.fat.sleep.s48), s.kss, fatigueLabel(r.fat.level), { ok: "เรียบร้อย", bad: "ไม่เรียบร้อย" }[s.dress] || "",
         { ok: "ผ่าน", caution: "ผ่านแบบมีมาตรการ", fail: "ไม่ผ่าน", er: "ไม่ผ่าน-ส่ง ER", pending: "ไม่ครบ" }[r.level], "", "",
         s.assessor || s.rosterAemt, [s.note, s.substitute && `คนแทน: ${s.substitute}`].filter(Boolean).join(" · ")]);
     });
     sortedRuns(d.runs).forEach((x) => {
       blowsOf(x).forEach((b, i, arr) => {
         const isLast = i === arr.length - 1;
-        rows.push(["ก่อนออก EMS", d.date, d.shift, x.n, b.time, b.driver, b.alc, "", "", "", "", "", "", "", "", "", b.kss ?? "", "",
+        rows.push(["ก่อนออก EMS", d.date, d.shift, x.n, b.time, b.driver, b.alc, "", "", "", "", "", "", "", "", "", b.kss ?? "", "", "",
           num(b.alc) != null && num(b.alc) > th.alcMax ? "ไม่ผ่าน" : "ผ่าน",
           isLast ? x.at : "", isLast ? reasonText(x) : "", "", ""]);
       });
     });
+  });
+  noShowList.forEach((x) => {
+    rows.push(["ไม่มาประเมิน", x.date, x.shift, "", "", x.driver, ...Array(13).fill(""), "ไม่มาประเมินต้นเวร", "", "", "", ""]);
   });
   return "﻿" + rows.map((r) => r.map(esc).join(",")).join("\n");
 }
@@ -421,7 +449,7 @@ const bareName = (t) => normName(String(t || "").trim().replace(TITLE_RE, ""));
 export function matchNames(options, query, limit = 8) {
   const q = normName(query);
   const list = [...new Set(options)];
-  if (!q) return list.sort((x, y) => bareName(x).localeCompare(bareName(y), "th")).slice(0, limit);
+  if (!q) return list.sort((x, y) => bareName(x).localeCompare(bareName(y), "th", { numeric: true })).slice(0, limit);
   return list
     .map((n) => {
       const b = bareName(n), f = normName(n);
@@ -430,7 +458,7 @@ export function matchNames(options, query, limit = 8) {
       return { n, score };
     })
     .filter((x) => x.score < 9)
-    .sort((x, y) => x.score - y.score || bareName(x.n).localeCompare(bareName(y.n), "th"))
+    .sort((x, y) => x.score - y.score || bareName(x.n).localeCompare(bareName(y.n), "th", { numeric: true }))
     .slice(0, limit)
     .map((x) => x.n);
 }

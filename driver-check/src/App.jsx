@@ -112,7 +112,7 @@ function Field({ value, onCommit, onFinal, numeric, className = "inp", ...rest }
 
 function NameInput({ id, value, onChange, options, placeholder, autoFocus }) {
   const [open, setOpen] = useState(false);
-  const matches = L.matchNames(options, value).filter((n) => n !== value);
+  const matches = L.matchNames(options, value, value ? 20 : 500).filter((n) => n !== value);
   return (
     <div className="fld" style={{ color: "inherit" }}>
       <input id={id} className="inp" value={value} placeholder={placeholder} autoComplete="off" autoFocus={autoFocus}
@@ -121,6 +121,7 @@ function NameInput({ id, value, onChange, options, placeholder, autoFocus }) {
         onBlur={() => setTimeout(() => setOpen(false), 150)} />
       {open && matches.length > 0 && (
         <div className="ac">
+          <div className="ac-h">{value ? "ชื่อที่ตรงกัน" : `เลื่อนเพื่อเลือกชื่อ (${matches.length} คน)`}</div>
           {matches.map((n) => (
             <button type="button" key={n} onMouseDown={(e) => e.preventDefault()} onClick={() => { onChange(n); setOpen(false); }}>{n}</button>
           ))}
@@ -366,6 +367,15 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
 
   return (
     <>
+      {res.level === "none" && L.ASSESS_SHIFTS.includes(shift) && L.shiftEnded(date, shift) && (
+        <div className="verdict v-er" role="alert">
+          <strong>ไม่มาประเมินต้นเวร</strong>
+          <span>เวร{shift} วันที่ {L.thaiDate(date)} จบแล้ว · {names.rosterDriver || "พขร. (ยังไม่ลงชื่อใน ems-check)"} ไม่ได้ตรวจความพร้อมก่อนปฏิบัติงาน</span>
+        </div>
+      )}
+      {shift === "ดึก" && (
+        <div className="verdict v-none"><span>เวรดึกใช้ผลตรวจต้นเวรของเวรบ่าย (พขร. บ่าย/ดึก เป็นคนเดียวกัน) · ถ้าเปลี่ยนคนกลางเวร ตรวจที่นี่ได้</span></div>
+      )}
       <section className="card roster">
         <div className="row">
           <h2 className="h" style={{ color: "var(--roster)" }}>ผู้ปฏิบัติงานเวรนี้</h2>
@@ -482,6 +492,13 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           ))}
         </div>
         <FatigueBadge fat={fat} />
+        <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+          <b style={{ fontSize: 14 }}>การแต่งกายสะอาด เรียบร้อย</b>
+          <div className="seg fit" role="group" aria-label="การแต่งกาย">
+            <button type="button" data-v="fit" aria-pressed={start.dress === "ok"} onClick={() => toggle("dress", "ok")}>เรียบร้อย</button>
+            <button type="button" data-v="unfit" aria-pressed={start.dress === "bad"} onClick={() => toggle("dress", "bad")}>ไม่เรียบร้อย</button>
+          </div>
+        </div>
         <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
           <b style={{ fontSize: 14 }}>ความเห็นผู้ตรวจ</b>
           <div className="seg fit" role="group" aria-label="ความเห็นผู้ตรวจ">
@@ -911,6 +928,12 @@ function SummaryTab(props) {
 function SummaryBody({ th, toast, date, reasons, lock }) {
   const [ym, setYm] = useState(date.slice(0, 7));
   const [data, setData] = useState(null);
+  const [rosterMonth, setRosterMonth] = useState(null);
+  useEffect(() => {
+    setRosterMonth(null);
+    const q = query(ref(db, "roster"), orderByKey(), startAt(ym), endAt(ym + "\uf8ff"));
+    return onValue(q, (s) => setRosterMonth(s.val() || {}), () => setRosterMonth({}));
+  }, [ym]);
   useEffect(() => {
     setData(null);
     const q = query(ref(db, "driverCheck"), orderByKey(), startAt(ym), endAt(ym + ""));
@@ -923,10 +946,11 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
   }, [ym]);
 
   const st = useMemo(() => (data ? L.summarize(data, th) : null), [data, th]);
+  const missed = useMemo(() => (data && rosterMonth ? L.noShows(rosterMonth, data, th) : []), [data, rosterMonth, th]);
   const [y, m] = ym.split("-").map(Number);
 
   function downloadCSV() {
-    const blob = new Blob([L.toCSV(data, th)], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([L.toCSV(data, th, missed)], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -947,14 +971,16 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
       </div>
 
       {!st && <div className="empty">กำลังโหลด…</div>}
-      {st && !data.length && <div className="empty">ยังไม่มีข้อมูลเดือนนี้</div>}
-      {st && data.length > 0 && (
+      {st && !data.length && !missed.length && <div className="empty">ยังไม่มีข้อมูลเดือนนี้</div>}
+      {st && (data.length > 0 || missed.length > 0) && (
         <>
           <div className="stats">
             <div className="stat"><span className="k">ตรวจต้นเวร</span><span className="v">{st.starts}</span><span className="s">ไม่ผ่าน {st.startFail} · ส่ง ER {st.startEr} · ล้าเหลือง {st.fatYellow} แดง {st.fatRed}</span></div>
             <div className="stat"><span className="k">เป่าก่อนออก</span><span className="v">{st.runs}</span><span className="s">พบแอลกอฮอล์ {st.alcPos} ครั้ง</span></div>
             <div className="stat"><span className="k">AT ≤ {th.atLimit} นาที</span><span className="v" style={{ color: "var(--ok)" }}>{st.atN ? Math.round((st.within / st.atN) * 100) + "%" : "-"}</span><span className="s">{st.within}/{st.atN} ครั้งที่กรอก AT</span></div>
             <div className="stat"><span className="k">AT เฉลี่ย / มัธยฐาน</span><span className="v">{fmt(st.mean)} / {fmt(st.median)}</span><span className="s">นาที · สูงสุด {fmt(st.max)}</span></div>
+            <div className="stat"><span className="k">ไม่มาประเมินต้นเวร</span><span className="v" style={{ color: missed.length ? "var(--bad)" : "inherit" }}>{missed.length}</span><span className="s">เวร (เช้า/บ่าย ที่มีชื่อใน ems-check)</span></div>
+            <div className="stat"><span className="k">แต่งกายไม่เรียบร้อย</span><span className="v" style={{ color: st.dressBad ? "var(--warn)" : "inherit" }}>{st.dressBad}</span><span className="s">ครั้ง</span></div>
             <div className="stat"><span className="k">ยังไม่กรอก AT</span><span className="v" style={{ color: st.pendingAt ? "var(--warn)" : "inherit" }}>{st.pendingAt}</span><span className="s">ครั้งที่ออกแล้ว</span></div>
             <div className="stat"><span className="k">AT เกินไม่มีเหตุผล</span><span className="v" style={{ color: st.noReason ? "var(--bad)" : "inherit" }}>{st.noReason}</span><span className="s">ต้องตามเติม</span></div>
           </div>
@@ -986,6 +1012,16 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
             </div>
           </section>
 
+          {missed.length > 0 && (
+            <section className="card">
+              <h2 className="h">ไม่มาประเมินต้นเวร</h2>
+              <div className="tbl"><table>
+                <thead><tr><th>วันที่</th><th>เวร</th><th>พขร. (ตามตารางเวร)</th></tr></thead>
+                <tbody>{missed.map((x) => <tr key={x.key}><td>{L.thaiDate(x.date)}</td><td>{x.shift}</td><td className="wrap">{x.driver}</td></tr>)}</tbody>
+              </table></div>
+            </section>
+          )}
+
           {reasonRows.length > 0 && (
             <section className="card">
               <h2 className="h">เหตุผลที่ AT เกิน {th.atLimit} นาที</h2>
@@ -1007,7 +1043,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
             </section>
           )}
 
-          <Msg title="ข้อความสรุปสำหรับไลน์ / ผู้บริหาร" text={L.msgMonth(st, ym, th)} toast={toast} />
+          <Msg title="ข้อความสรุปสำหรับไลน์ / ผู้บริหาร" text={L.msgMonth(st, ym, th, missed.length)} toast={toast} />
           <button type="button" className="btn soft" onClick={downloadCSV}>ดาวน์โหลดไฟล์ Excel (CSV)</button>
         </>
       )}
