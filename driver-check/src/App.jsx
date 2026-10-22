@@ -437,7 +437,11 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
         </section>
       )}
 
-      <Msg title="ข้อความไลน์ · ต้นเวร" text={L.msgStart(date, shift, start, res, { driver: names.driver, assessor: names.assessor })} toast={toast} />
+      {failed ? (
+        <Msg title="ข้อความไลน์ · รายงานต้นเวรไม่ผ่าน" text={L.msgStart(date, shift, start, res, { driver: names.driver, assessor: names.assessor })} toast={toast} />
+      ) : (res.level === "ok" || res.level === "caution") ? (
+        <div className="empty" style={{ borderStyle: "solid", color: "var(--ok)" }}>บันทึกผลแล้ว · ผ่านเกณฑ์ ไม่ต้องรายงานในไลน์</div>
+      ) : null}
     </>
   );
 }
