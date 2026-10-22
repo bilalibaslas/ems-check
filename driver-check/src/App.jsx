@@ -219,6 +219,13 @@ export default function App() {
   const runs = L.sortedRuns(doc && doc.runs);
   const lastRun = runs[runs.length - 1];
   const beforeDot = lastRun && !L.runCleared(lastRun, th) ? "!" : "";
+  const startRes = L.evalStart(start, th, shift);
+  const startDot = startRes.level === "pending" ? "!" : "";
+  const [leaveWarn, setLeaveWarn] = useState(null);
+  const goTab = (id) => {
+    if (tab === "start" && id !== "start" && startRes.level === "pending") setLeaveWarn(id);
+    else setTab(id);
+  };
   const afterCount = runs.filter((x) => L.runCleared(x, th) && (num(x.at) == null || (num(x.at) > th.atLimit && !L.reasonReady(x)))).length;
 
   const loading = doc === undefined;
@@ -245,8 +252,8 @@ export default function App() {
         </div>
         {shift === "ดึก" && <div className="sub">เวรดึก 00:15–08:14 นับเป็นของวันก่อนหน้า (เหมือน ems-check)</div>}
         <nav className="tabs" role="tablist">
-          {[["start", "ต้นเวร", ""], ["before", "ก่อนออก", beforeDot], ["after", "หลังออก", afterCount || ""], ["summary", "สรุป", ""]].map(([id, label, dot]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+          {[["start", "ต้นเวร", startDot], ["before", "ก่อนออก", beforeDot], ["after", "หลังออก", afterCount || ""], ["summary", "สรุป", ""]].map(([id, label, dot]) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => goTab(id)}>
               {label}{dot !== "" && <span className="dot" aria-label="มีรายการรอดำเนินการ">{dot}</span>}
             </button>
           ))}
@@ -261,6 +268,10 @@ export default function App() {
         {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} />}
       </main>
 
+      {leaveWarn && (
+        <MissingDialog items={startRes.items} onBack={() => setLeaveWarn(null)}
+          skipLabel="ไปต่อก่อน" onSkip={() => { setTab(leaveWarn); setLeaveWarn(null); }} />
+      )}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
   );
@@ -277,6 +288,12 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
   const failed = res.level === "fail" || res.level === "er";
 
   const toggle = (k, v) => saveStart({ [k]: start[k] === v ? null : v });
+  const [missing, setMissing] = useState(false);
+  function confirm() {
+    if (res.level === "pending" || res.level === "none") { setMissing(true); return; }
+    saveStart({ confirmed: true, confirmedAt: hhmm() });
+    toast("ยืนยันผลต้นเวรแล้ว");
+  }
 
   function recheckForSubstitute() {
     if (!start.substitute) return;
@@ -439,9 +456,12 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
 
       {failed ? (
         <Msg title="ข้อความไลน์ · รายงานต้นเวรไม่ผ่าน" text={L.msgStart(date, shift, start, res, { driver: names.driver, assessor: names.assessor })} toast={toast} />
-      ) : (res.level === "ok" || res.level === "caution") ? (
-        <div className="empty" style={{ borderStyle: "solid", color: "var(--ok)" }}>บันทึกผลแล้ว · ผ่านเกณฑ์ ไม่ต้องรายงานในไลน์</div>
-      ) : null}
+      ) : (res.level === "ok" || res.level === "caution") && start.confirmed ? (
+        <div className="empty" style={{ borderStyle: "solid", color: "var(--ok)" }}>ยืนยันผลแล้ว{start.confirmedAt ? ` ${start.confirmedAt} น.` : ""} · ผ่านเกณฑ์ ไม่ต้องรายงานในไลน์</div>
+      ) : (
+        <button type="button" className="btn pri" onClick={confirm}>ยืนยันผลตรวจต้นเวร</button>
+      )}
+      {missing && <MissingDialog items={res.items} onBack={() => setMissing(false)} />}
     </>
   );
 }
@@ -464,10 +484,34 @@ function FatigueBadge({ fat }) {
 
 const CAUTION_STEPS = ["แจ้งทีมที่ออกด้วยกันให้ช่วยสังเกต", "ถามคะแนน KSS ซ้ำก่อนออก EMS ทุกครั้ง", "ช่วงว่างให้พักหรืองีบสั้นได้"];
 
+function MissingDialog({ items, onBack, onSkip, skipLabel }) {
+  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "ชั่วโมงนอน", "KSS", "ความเห็นผู้ตรวจ"];
+  return (
+    <div className="overlay" onKeyDown={(e) => { if (e.key === "Escape") onBack(); }}>
+      <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="miss-h">
+        <div className="head" style={{ background: "var(--warn-solid)" }}>
+          <div className="row" style={{ justifyContent: "flex-start", gap: 10 }}>
+            <WarnIcon /><b id="miss-h">ต้นเวรยังกรอกไม่ครบ</b>
+          </div>
+          <span>กรอกให้ครบก่อน ระบบจึงจะประเมินได้ว่า พขร. พร้อมขับหรือไม่</span>
+        </div>
+        <div className="body">
+          <b style={{ fontSize: 15 }}>ยังขาด</b>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 15, lineHeight: 1.8 }}>{list.map((i) => <li key={i}>{i}</li>)}</ul>
+        </div>
+        <div className="foot">
+          {onSkip && <button type="button" className="btn soft" onClick={onSkip}>{skipLabel}</button>}
+          <button type="button" className="btn pri" autoFocus onClick={onBack}>กลับไปกรอก</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Verdict({ res }) {
   const list = res.items.length ? <ul>{res.items.map((i) => <li key={i}>{i}</li>)}</ul> : null;
   if (res.level === "none") return <div className="verdict v-none"><strong>ยังไม่ได้กรอกผล</strong><span>กรอกแอลกอฮอล์ สัญญาณชีพ และแบบประเมินความล้า แล้วผลจะขึ้นที่นี่</span></div>;
-  if (res.level === "pending") return <div className="verdict v-none"><strong>ยังไม่พบค่าผิดปกติ</strong><span>ยังขาด: {res.items.join(", ")}</span></div>;
+  if (res.level === "pending") return <div className="verdict v-fail"><strong>ยังกรอกไม่ครบ</strong><span>ยังขาด: {res.items.join(", ")}</span></div>;
   if (res.level === "caution") return (
     <div className="verdict v-fail" role="status">
       <strong>ปฏิบัติงานได้ · ต้องมีมาตรการลดความล้า</strong>
