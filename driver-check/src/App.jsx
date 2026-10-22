@@ -444,11 +444,8 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           <label className={"fld" + (fat.rules[0].fail ? " bad" : "")}>ตื่นนอน (เวลา)
             <Field className="inp big" type="time" value={start.wake} onCommit={(v) => saveStart({ wake: v })} />
           </label>
-          <label className="fld">งีบ (ชม.) · ไม่ได้งีบใส่ 0
+          <label className="fld wide">งีบ (ชม.) · ไม่ได้งีบใส่ 0
             <Field numeric className="inp big" placeholder="0" value={start.nap} onCommit={(v) => saveStart({ nap: v })} />
-          </label>
-          <label className={"fld" + (fat.rules[1].fail ? " bad" : "")}>คืนก่อนหน้า นอน (ชม.)
-            <Field numeric className="inp big" placeholder="-" value={start.prevNight} onCommit={(v) => saveStart({ prevNight: v })} />
           </label>
         </div>
         {fat.sleep.s24 != null && (
@@ -456,20 +453,6 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
             นอนหลับ <b>{fmt(fat.sleep.main)}</b> ชม.{fat.sleep.nap ? <> + งีบ <b>{fmt(fat.sleep.nap)}</b></> : null} = <b className={fat.rules[0].fail ? "t-bad" : "t-ok"}>{fmt(fat.sleep.s24)} ชม.</b>
             {" "}({fat.rules[0].fail ? `น้อยกว่า ${th.sleep24Min} ชม.` : "พอ"})
           </div>
-        )}
-        {fat.sleep.s48 != null ? (
-          <div className="rules">
-            {fat.rules.slice(1).map((r) => (
-              <div key={r.id}>
-                <span>{r.label}</span>
-                <b className={r.fail == null ? "" : r.fail ? "t-bad" : "t-ok"}>
-                  {r.fail == null ? "-" : `${r.fail ? "ไม่ผ่าน" : "ผ่าน"} (${fmt(r.value)}${r.id === "awake" ? ` / ${fmt(fat.sleep.s48)}` : ""})`}
-                </b>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <span className="sub">ใส่ชั่วโมงนอนคืนก่อนหน้า เพื่อเช็กการนอนสะสม 48 ชม. และชั่วโมงที่ตื่นถึงจบเวร</span>
         )}
       </section>
 
@@ -620,7 +603,7 @@ function StartAlarm({ items, res, onClose }) {
 }
 
 function MissingDialog({ items, onBack, onSkip, skipLabel }) {
-  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "SpO₂", "เวลาเข้านอน", "เวลาตื่นนอน", "ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)", "ชั่วโมงนอนคืนก่อนหน้า", "KSS", "ความเห็นผู้ตรวจ"];
+  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "SpO₂", "เวลาเข้านอน", "เวลาตื่นนอน", "ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)", "KSS", "ความเห็นผู้ตรวจ"];
   return (
     <div className="overlay" onKeyDown={(e) => { if (e.key === "Escape") onBack(); }}>
       <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="miss-h">

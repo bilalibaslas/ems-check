@@ -102,7 +102,8 @@ export function awakeAtShiftEnd(wake, checkTime, shift) {
   return (sofar + left) / 60;
 }
 
-// ชั่วโมงนอนจาก เวลาเข้านอน–ตื่น + งีบ (ไม่ได้งีบ = 0); คืนก่อนหน้า (ไม่บังคับ) ใช้คิดช่วง 48 ชม.
+// ชั่วโมงนอนใน 24 ชม. จาก เวลาเข้านอน–ตื่น + งีบ (ไม่ได้งีบ = 0)
+// เกณฑ์ 48 ชม. และชั่วโมงที่ตื่นถึงจบเวร ใช้เฉพาะข้อมูลเก่าที่มีชั่วโมงนอนคืนก่อนหน้า (ตัดช่องนี้ออกจากฟอร์มแล้ว)
 // ข้อมูลรุ่นแรกที่กรอก sleep24/sleep48 ตรงๆ ยังอ่านได้
 export function sleepFrom(s) {
   s = s || {};
@@ -139,7 +140,7 @@ export function fatigueEval(s, shift, th, nowTime) {
   let level;
   if (kssStop || count >= 2) level = "red";
   else if (count === 1) level = "yellow";
-  else if (s24 == null || s48 == null || kss == null) level = "pending";
+  else if (s24 == null || kss == null) level = "pending";
   else level = "green";
   if (s24 == null && s48 == null && kss == null && !obsList.length) level = "none";
   return { level, rules, awake, kss, reasons, sleepFails, sleep: sl };
@@ -181,7 +182,6 @@ export function evalStart(s, th, shift) {
   if (!s.bed) missing.push("เวลาเข้านอน");
   if (!s.wake) missing.push("เวลาตื่นนอน");
   if (num(s.nap) == null) missing.push("ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)");
-  if (num(s.prevNight) == null) missing.push("ชั่วโมงนอนคืนก่อนหน้า");
   if (num(s.kss) == null) missing.push("KSS");
   if (!s.dress) missing.push("การแต่งกาย");
   if (!s.fit) missing.push("ความเห็นผู้ตรวจ");
