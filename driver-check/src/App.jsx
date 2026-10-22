@@ -269,7 +269,7 @@ export default function App() {
   const afterCount = runs.filter((x) => L.runCleared(x, th) && (num(x.at) == null || (num(x.at) > th.atLimit && !L.reasonReady(x)))).length;
 
   const loading = doc === undefined;
-  const common = { date, shift, th, save, toast, names, staff, runs, reasons };
+  const common = { date, shift, th, save, toast, names, staff, runs, reasons, review: (doc && doc.endReview) || null };
 
   return (
     <div className="app">
@@ -824,7 +824,41 @@ function AlcAlert({ run, save, staff, onClose, onReplace }) {
 }
 
 /* ── หลังออก: AT ── */
-function AfterTab({ date, shift, th, save, toast, runs, reasons }) {
+function EndReview({ review, save, toast, names, shift }) {
+  const rv = review || {};
+  const items = rv.items || {};
+  const driver = rv.driver || names.current || "";
+  const [open, setOpen] = useState(false);
+  const set1 = (patch) => save(Object.fromEntries(Object.entries({ driver, at: hhmm(), ...patch }).map(([k, v]) => [`endReview/${k}`, v])));
+  const showForm = open || rv.status === "issue";
+  return (
+    <section className={"card " + (rv.status === "issue" ? "warn" : "")}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <h2 className="h">จบเวร{shift === "บ่าย" || shift === "ดึก" ? "บ่าย/ดึก" : shift}: พขร. มีเรื่องควรปรับปรุงไหม</h2>
+        <span className="sub">{driver || "พขร."} · ไม่มีอะไรกด “ไม่มี” ครั้งเดียวจบ</span>
+      </div>
+      <div className="seg fit" role="group" aria-label="ผลประเมินจบเวร" style={{ alignSelf: "flex-start" }}>
+        <button type="button" data-v="fit" aria-pressed={rv.status === "ok"} onClick={() => { set1({ status: "ok", items: null, note: null }); setOpen(false); toast("บันทึกแล้ว · ไม่มีเรื่องต้องปรับปรุง"); }}>ไม่มี</button>
+        <button type="button" data-v="unfit" aria-pressed={rv.status === "issue"} onClick={() => { setOpen(true); set1({ status: "issue" }); }}>มี</button>
+      </div>
+      {showForm && rv.status !== "ok" && (
+        <>
+          <div className="checks" style={{ color: "var(--ink)" }}>
+            {L.REVIEW_ITEMS.map(([k, t]) => (
+              <label key={k}><input type="checkbox" style={{ accentColor: "var(--warn-solid)" }} checked={!!items[k]} onChange={(e) => set1({ [`items/${k}`]: e.target.checked || null })} />{t}</label>
+            ))}
+          </div>
+          <label className="fld">รายละเอียด
+            <Field placeholder="เช่น ขับเร็วเกินช่วงถนนสายหลัก" value={rv.note} onCommit={(v) => set1({ note: v || null })} />
+          </label>
+        </>
+      )}
+      {rv.status && <span className="sub">บันทึกแล้ว {rv.at ? `${rv.at} น.` : ""}{rv.status === "issue" ? ` · ${L.reviewIssues(rv).length} ข้อ` : ""}</span>}
+    </section>
+  );
+}
+
+function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }) {
   const [sheetId, setSheetId] = useState(null);
   const departed = runs.filter((x) => L.runCleared(x, th));
   const blocked = runs.filter((x) => !L.runCleared(x, th));
@@ -879,6 +913,8 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons }) {
       )}
 
       <Msg title="ข้อความไลน์ · ส่งหลังออก" text={L.msgAt(date, shift, runs, th)} toast={toast} />
+
+      <EndReview review={review} save={save} toast={toast} names={names} shift={shift} />
 
       {sheetRun && <ATSheet run={sheetRun} th={th} save={save} toast={toast} reasons={reasons} onClose={() => setSheetId(null)} />}
     </>
@@ -1011,6 +1047,25 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
               </table>
             </div>
           </section>
+
+          {st.reviewIssue > 0 && (
+            <section className="card">
+              <h2 className="h">ประเมินจบเวร · เรื่องควรปรับปรุง</h2>
+              <span className="sub">ประเมินแล้ว {st.reviewed} เวร · มีเรื่อง {st.reviewIssue} เวร</span>
+              <div className="tbl"><table><tbody>
+                {Object.entries(st.reviewCount).sort((a, b) => b[1] - a[1]).map(([k, n]) => <tr key={k}><td className="wrap">{k}</td><td className="r">{n}</td></tr>)}
+              </tbody></table></div>
+              <details>
+                <summary>รายละเอียด ({st.reviewList.length})</summary>
+                <div className="tbl"><table>
+                  <thead><tr><th>วันที่</th><th>เวร</th><th>พขร.</th><th>เรื่อง</th></tr></thead>
+                  <tbody>{st.reviewList.map((x, i) => (
+                    <tr key={i}><td>{L.thaiDate(x.date)}</td><td>{x.shift}</td><td className="wrap">{x.driver}</td><td className="wrap">{x.items.join(", ")}{x.note ? ` · ${x.note}` : ""}</td></tr>
+                  ))}</tbody>
+                </table></div>
+              </details>
+            </section>
+          )}
 
           {missed.length > 0 && (
             <section className="card">

@@ -2,8 +2,23 @@
 
 export const MONTHS = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
 export const SHIFTS = ["เช้า", "บ่าย", "ดึก"];
-// เวลาจบเวร (นาทีของวัน) ใช้คำนวณชั่วโมงที่ตื่นถึงจบเวร
-const SHIFT_END = { "เช้า": 16 * 60 + 15, "บ่าย": 15, "ดึก": 8 * 60 + 15 };
+// เวลาจบเวรของ พขร. (นาทีของวัน): เช้า 08:15–16:15, บ่าย/ดึก 16:15–08:15 ของอีกวัน
+const SHIFT_END = { "เช้า": 16 * 60 + 15, "บ่าย": 8 * 60 + 15, "ดึก": 8 * 60 + 15 };
+export const SHIFT_END_TEXT = { "เช้า": "16:15", "บ่าย": "08:15 ของอีกวัน", "ดึก": "08:15" };
+
+// ประเมินการปฏิบัติงานตอนจบเวร (รายงานเฉพาะเมื่อมีเรื่องควรปรับปรุง)
+export const REVIEW_ITEMS = [
+  ["service", "ด้านการบริการ"],
+  ["punctual", "การตรงต่อเวลา"],
+  ["manners", "มารยาทในการขับรถ"],
+  ["decision", "การตัดสินใจแก้ปัญหาในงาน"],
+  ["traffic", "ปฏิบัติตามกฎจราจร (ความเร็วไม่เกิน 90 กม./ชม.)"],
+  ["kind", "มีน้ำใจ ช่วยเหลืองาน สุภาพ"],
+];
+export function reviewIssues(rv) {
+  if (!rv || rv.status !== "issue") return [];
+  return REVIEW_ITEMS.filter(([k]) => (rv.items || {})[k]).map(([, t]) => t);
+}
 
 // ค่าตั้งต้น — แก้ได้ในแท็บสรุป › ตั้งค่า
 export const TH_DEF = {
@@ -66,7 +81,7 @@ export const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Nu
 export const fmt = (v) => (v == null ? "-" : String(Math.round(v * 10) / 10));
 const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
-// เวรเช้า 08:15–16:14, บ่าย 16:15–00:14, ดึก 00:15–08:14 (นับเป็นของวันก่อนหน้า เหมือน ems-check)
+// เลือกเวรตามเวลาปัจจุบัน: เช้า 08:15–16:14, บ่าย 16:15–00:14, ดึก 00:15–08:14 (นับเป็นของวันก่อนหน้า เหมือน ems-check)
 export function currentShift(now = new Date()) {
   const m = now.getHours() * 60 + now.getMinutes();
   const prev = new Date(now);
@@ -349,7 +364,7 @@ export function startsOf(d) {
 
 export function summarize(list, th) {
   const st = {
-    shifts: list.length, starts: 0, dressBad: 0, startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
+    shifts: list.length, starts: 0, dressBad: 0, reviewed: 0, reviewIssue: 0, reviewCount: {}, reviewList: [], startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
     runs: 0, departed: 0, alcPos: 0, atN: 0, within: 0, noReason: 0, pendingAt: 0,
     ats: [], reasons: {}, lateList: [],
     byShift: Object.fromEntries(SHIFTS.map((s) => [s, { runs: 0, atN: 0, sum: 0, late: 0 }])),
@@ -367,6 +382,15 @@ export function summarize(list, th) {
       if (r.fat.level === "red") st.fatRed++;
       if (num(s.alc) != null && num(s.alc) > th.alcMax) st.startAlc++;
     });
+    if (d.endReview && d.endReview.status) {
+      st.reviewed++;
+      const items = reviewIssues(d.endReview);
+      if (d.endReview.status === "issue") {
+        st.reviewIssue++;
+        items.forEach((t) => { st.reviewCount[t] = (st.reviewCount[t] || 0) + 1; });
+        st.reviewList.push({ date: d.date, shift: d.shift, driver: d.endReview.driver || "", items, note: d.endReview.note || "" });
+      }
+    }
     sortedRuns(d.runs).forEach((x) => {
       st.runs++;
       const bs = st.byShift[d.shift] || st.byShift["เช้า"];
@@ -409,8 +433,10 @@ export function msgMonth(st, ym, th, noShowCount = 0) {
     `3. AT ≤ ${th.atLimit} นาที ${st.within}/${st.atN} ครั้ง (${pct}%) · เฉลี่ย ${fmt(st.mean)} นาที · มัธยฐาน ${fmt(st.median)} นาที`,
   ];
   L.push(`4. ไม่มาประเมินต้นเวร ${noShowCount} เวร · การแต่งกายไม่เรียบร้อย ${st.dressBad} ครั้ง`);
+  const rc = Object.entries(st.reviewCount).sort((a, b) => b[1] - a[1]);
+  L.push(`5. ประเมินจบเวร ${st.reviewed} เวร: มีเรื่องควรปรับปรุง ${st.reviewIssue} เวร${rc.length ? ` (${rc.map(([k, n]) => `${k} ${n}`).join(", ")})` : ""}`);
   const rs = Object.entries(st.reasons).sort((a, b) => b[1] - a[1]);
-  if (rs.length) L.push(`5. เหตุผลที่ AT เกิน ${th.atLimit} นาที: ` + rs.map(([k, n]) => `${k} ${n}`).join(", "));
+  if (rs.length) L.push(`6. เหตุผลที่ AT เกิน ${th.atLimit} นาที: ` + rs.map(([k, n]) => `${k} ${n}`).join(", "));
   return L.join("\n");
 }
 
@@ -435,6 +461,12 @@ export function toCSV(list, th, noShowList = []) {
           isLast ? x.at : "", isLast ? reasonText(x) : "", "", ""]);
       });
     });
+  });
+  list.forEach((d) => {
+    const rv = d.endReview;
+    if (!rv || !rv.status) return;
+    rows.push(["ประเมินจบเวร", d.date, d.shift, "", rv.at || "", rv.driver || "", ...Array(13).fill(""),
+      rv.status === "ok" ? "ไม่มีเรื่องต้องปรับปรุง" : "ควรปรับปรุง: " + reviewIssues(rv).join(", "), "", "", "", rv.note || ""]);
   });
   noShowList.forEach((x) => {
     rows.push(["ไม่มาประเมิน", x.date, x.shift, "", "", x.driver, ...Array(13).fill(""), "ไม่มาประเมินต้นเวร", "", "", "", ""]);
