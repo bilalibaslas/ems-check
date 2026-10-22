@@ -67,6 +67,9 @@ async function copyText(text, toast) {
   }
 }
 
+// true ระหว่างที่กำลังพิมพ์ในช่องใดช่องหนึ่ง (ยังไม่ออกจากช่อง) ใช้เลื่อน alarm ไปหลังกรอกเสร็จ
+let typing = false;
+
 // ช่องกรอกที่บันทึกเองหลังหยุดพิมพ์ และไม่โดนค่าจากเครื่องอื่นทับตอนกำลังพิมพ์
 function Field({ value, onCommit, onFinal, numeric, className = "inp", ...rest }) {
   const [v, setV] = useState(value ?? "");
@@ -94,10 +97,11 @@ function Field({ value, onCommit, onFinal, numeric, className = "inp", ...rest }
       inputMode={numeric ? "decimal" : rest.inputMode}
       autoComplete="off"
       onFocus={() => { focused.current = true; }}
-      onBlur={(e) => { focused.current = false; commit(e.target.value); onFinal && onFinal(e.target.value); }}
+      onBlur={(e) => { focused.current = false; typing = false; commit(e.target.value); onFinal && onFinal(e.target.value); }}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       onChange={(e) => {
         const x = e.target.value;
+        typing = true;
         setV(x);
         clearTimeout(timer.current);
         timer.current = setTimeout(() => commit(x), 600);
@@ -108,7 +112,7 @@ function Field({ value, onCommit, onFinal, numeric, className = "inp", ...rest }
 
 function NameInput({ id, value, onChange, options, placeholder, autoFocus }) {
   const [open, setOpen] = useState(false);
-  const matches = L.matchNames(options, value).filter((n) => n !== value);
+  const matches = L.matchNames(options, value, value ? 20 : 500).filter((n) => n !== value);
   return (
     <div className="fld" style={{ color: "inherit" }}>
       <input id={id} className="inp" value={value} placeholder={placeholder} autoComplete="off" autoFocus={autoFocus}
@@ -117,6 +121,7 @@ function NameInput({ id, value, onChange, options, placeholder, autoFocus }) {
         onBlur={() => setTimeout(() => setOpen(false), 150)} />
       {open && matches.length > 0 && (
         <div className="ac">
+          <div className="ac-h">{value ? "ชื่อที่ตรงกัน" : `เลื่อนเพื่อเลือกชื่อ (${matches.length} คน)`}</div>
           {matches.map((n) => (
             <button type="button" key={n} onMouseDown={(e) => e.preventDefault()} onClick={() => { onChange(n); setOpen(false); }}>{n}</button>
           ))}
@@ -149,6 +154,41 @@ function Msg({ title, text, toast }) {
       <pre>{text}</pre>
     </section>
   );
+}
+
+// เสียงเตือน + สั่น (มือถือที่รองรับ) ใช้ตอนพบค่าที่ไม่ผ่าน
+let audioCtx = null;
+function getAudio() {
+  try {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    if (!audioCtx) audioCtx = new C();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  } catch { return null; }
+}
+if (typeof window !== "undefined") {
+  // iPhone ยอมให้เล่นเสียงหลังจากผู้ใช้แตะหน้าจอแล้วเท่านั้น
+  window.addEventListener("pointerdown", () => getAudio(), { once: true, passive: true });
+}
+function alarm() {
+  try { if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]); } catch { /* ignore */ }
+  const ctx = getAudio();
+  if (!ctx) return;
+  try {
+    [0, 0.35, 0.7].forEach((t) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      const at = ctx.currentTime + t;
+      o.type = "square";
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.2, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
+      o.connect(g).connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 0.27);
+    });
+  } catch { /* ignore */ }
 }
 
 const WarnIcon = ({ color = "#fff" }) => (
@@ -229,7 +269,7 @@ export default function App() {
   const afterCount = runs.filter((x) => L.runCleared(x, th) && (num(x.at) == null || (num(x.at) > th.atLimit && !L.reasonReady(x)))).length;
 
   const loading = doc === undefined;
-  const common = { date, shift, th, save, toast, names, staff, runs, reasons };
+  const common = { date, shift, th, save, toast, names, staff, runs, reasons, review: (doc && doc.endReview) || null };
 
   return (
     <div className="app">
@@ -262,7 +302,7 @@ export default function App() {
 
       <main className="main">
         {tab !== "summary" && loading && <div className="empty">กำลังโหลด…</div>}
-        {tab === "start" && !loading && <StartTab {...common} start={start} saveStart={saveStart} />}
+        {tab === "start" && !loading && <StartTab key={key} {...common} start={start} saveStart={saveStart} />}
         {tab === "before" && !loading && <BeforeTab {...common} dbKey={key} />}
         {tab === "after" && !loading && <AfterTab {...common} />}
         {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} />}
@@ -289,6 +329,29 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
 
   const toggle = (k, v) => saveStart({ [k]: start[k] === v ? null : v });
   const [missing, setMissing] = useState(false);
+  // alarm เมื่อมีข้อไม่ผ่านใหม่ (ข้อที่มีอยู่แล้วตอนเปิดหน้าไม่เตือนซ้ำ)
+  const issues = L.startIssues(start, th, shift);
+  const issueSig = issues.map((i) => i.key).join("|");
+  const acked = useRef(null);
+  const [alarmItems, setAlarmItems] = useState(null);
+  // รอให้กรอกช่องเสร็จก่อน (ออกจากช่อง) ไม่เตือนระหว่างพิมพ์ เช่น พิมพ์ SBP "1" ก่อนจะเป็น "120"
+  const [blurTick, setBlurTick] = useState(0);
+  useEffect(() => {
+    const h = () => setTimeout(() => setBlurTick((t) => t + 1), 0);
+    document.addEventListener("focusout", h);
+    return () => document.removeEventListener("focusout", h);
+  }, []);
+  useEffect(() => {
+    const keys = issues.map((i) => i.key);
+    if (acked.current === null) { acked.current = new Set(keys); return; }
+    if (typing) return;
+    [...acked.current].forEach((k) => { if (!keys.includes(k)) acked.current.delete(k); });
+    const fresh = issues.filter((i) => !acked.current.has(i.key));
+    if (!fresh.length) return;
+    fresh.forEach((i) => acked.current.add(i.key));
+    setAlarmItems((prev) => [...(prev || []), ...fresh]);
+    alarm();
+  }, [issueSig, blurTick]); // eslint-disable-line react-hooks/exhaustive-deps
   function confirm() {
     if (res.level === "pending" || res.level === "none") { setMissing(true); return; }
     saveStart({ confirmed: true, confirmedAt: hhmm() });
@@ -304,6 +367,15 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
 
   return (
     <>
+      {res.level === "none" && L.ASSESS_SHIFTS.includes(shift) && L.shiftEnded(date, shift) && (
+        <div className="verdict v-er" role="alert">
+          <strong>ไม่มาประเมินต้นเวร</strong>
+          <span>เวร{shift} วันที่ {L.thaiDate(date)} จบแล้ว · {names.rosterDriver || "พขร. (ยังไม่ลงชื่อใน ems-check)"} ไม่ได้ตรวจความพร้อมก่อนปฏิบัติงาน</span>
+        </div>
+      )}
+      {shift === "ดึก" && (
+        <div className="verdict v-none"><span>เวรดึกใช้ผลตรวจต้นเวรของเวรบ่าย (พขร. บ่าย/ดึก เป็นคนเดียวกัน) · ถ้าเปลี่ยนคนกลางเวร ตรวจที่นี่ได้</span></div>
+      )}
       <section className="card roster">
         <div className="row">
           <h2 className="h" style={{ color: "var(--roster)" }}>ผู้ปฏิบัติงานเวรนี้</h2>
@@ -354,7 +426,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           <label className={"fld" + (f.pr ? " bad" : "")}>PR (/min)
             <Field numeric className="inp big" placeholder="80" value={start.pr} onCommit={(v) => saveStart({ pr: v })} />
           </label>
-          <label className="fld">SpO₂ (%) · ไม่บังคับ
+          <label className={"fld" + (f.spo2 ? " bad" : "")}>SpO₂ (%)
             <Field numeric className="inp big" placeholder="-" value={start.spo2} onCommit={(v) => saveStart({ spo2: v })} />
           </label>
         </div>
@@ -375,7 +447,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           <label className="fld">งีบ (ชม.) · ไม่ได้งีบใส่ 0
             <Field numeric className="inp big" placeholder="0" value={start.nap} onCommit={(v) => saveStart({ nap: v })} />
           </label>
-          <label className="fld">คืนก่อนหน้า นอน (ชม.) · ไม่บังคับ
+          <label className={"fld" + (fat.rules[1].fail ? " bad" : "")}>คืนก่อนหน้า นอน (ชม.)
             <Field numeric className="inp big" placeholder="-" value={start.prevNight} onCommit={(v) => saveStart({ prevNight: v })} />
           </label>
         </div>
@@ -397,7 +469,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
             ))}
           </div>
         ) : (
-          <span className="sub">ถ้าใส่ชั่วโมงนอนคืนก่อนหน้า แอปจะเช็กการนอนสะสม 48 ชม. และชั่วโมงที่ตื่นถึงจบเวรให้ด้วย</span>
+          <span className="sub">ใส่ชั่วโมงนอนคืนก่อนหน้า เพื่อเช็กการนอนสะสม 48 ชม. และชั่วโมงที่ตื่นถึงจบเวร</span>
         )}
       </section>
 
@@ -420,6 +492,13 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           ))}
         </div>
         <FatigueBadge fat={fat} />
+        <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+          <b style={{ fontSize: 14 }}>การแต่งกายสะอาด เรียบร้อย</b>
+          <div className="seg fit" role="group" aria-label="การแต่งกาย">
+            <button type="button" data-v="fit" aria-pressed={start.dress === "ok"} onClick={() => toggle("dress", "ok")}>เรียบร้อย</button>
+            <button type="button" data-v="unfit" aria-pressed={start.dress === "bad"} onClick={() => toggle("dress", "bad")}>ไม่เรียบร้อย</button>
+          </div>
+        </div>
         <div className="row" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
           <b style={{ fontSize: 14 }}>ความเห็นผู้ตรวจ</b>
           <div className="seg fit" role="group" aria-label="ความเห็นผู้ตรวจ">
@@ -474,6 +553,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
         <button type="button" className="btn pri" onClick={confirm}>ยืนยันผลตรวจต้นเวร</button>
       )}
       {missing && <MissingDialog items={res.items} onBack={() => setMissing(false)} />}
+      {alarmItems && !missing && <StartAlarm items={alarmItems} res={res} onClose={() => setAlarmItems(null)} />}
     </>
   );
 }
@@ -496,8 +576,51 @@ function FatigueBadge({ fat }) {
 
 const CAUTION_STEPS = ["แจ้งทีมที่ออกด้วยกันให้ช่วยสังเกต", "ถามคะแนน KSS ซ้ำก่อนออก EMS ทุกครั้ง", "ช่วงว่างให้พักหรืองีบสั้นได้"];
 
+const SEV = { er: ["p-bad", "ส่ง ER"], fail: ["p-bad", "ไม่ผ่าน"], warn: ["p-warn", "เฝ้าระวัง"] };
+function StartAlarm({ items, res, onClose }) {
+  const worst = items.some((i) => i.sev === "er") ? "er" : items.some((i) => i.sev === "fail") ? "fail" : "warn";
+  const overall = res.level === "er" ? "er" : res.level === "fail" ? "fail" : worst === "warn" ? "warn" : worst;
+  const head = {
+    er: ["var(--bad-solid)", "ไม่ผ่าน · พิจารณาเปิดบัตรตรวจ ER"],
+    fail: ["var(--bad-solid)", "ไม่ผ่าน · ห้ามขับ ให้เปลี่ยน พขร."],
+    warn: ["var(--warn-solid)", "พบความเสี่ยงความล้า"],
+  }[overall];
+  const steps = overall === "er"
+    ? ["รายงาน พอป. ประจำเวร", "แจ้งกลุ่มงานบริหารทั่วไป ให้เปลี่ยน พขร.", "เปิดบัตรและนำเข้าตรวจที่ ER"]
+    : overall === "fail"
+      ? ["รายงาน พอป. ประจำเวร", "แจ้งกลุ่มงานบริหารทั่วไป ให้เปลี่ยน พขร."]
+      : ["ถ้ารวมกับข้ออื่นอาจกลายเป็นระดับแดง", "ถ้าผ่านแบบเหลือง: ให้ทีมช่วยสังเกต และถาม KSS ซ้ำก่อนออกทุกครั้ง"];
+  return (
+    <div className="overlay" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="alarm-h">
+        <div className="head" style={{ background: head[0] }}>
+          <div className="row" style={{ justifyContent: "flex-start", gap: 10 }}>
+            <WarnIcon /><b id="alarm-h">{head[1]}</b>
+          </div>
+        </div>
+        <div className="body">
+          <b style={{ fontSize: 15 }}>พบ</b>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {items.map((i) => (
+              <div key={i.key} className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+                <span style={{ fontSize: 15 }}>{i.text}</span>
+                <span className={"pill " + SEV[i.sev][0]}>{SEV[i.sev][1]}</span>
+              </div>
+            ))}
+          </div>
+          <b style={{ fontSize: 15 }}>สิ่งที่ต้องทำ</b>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14.5, lineHeight: 1.7 }}>{steps.map((t) => <li key={t}>{t}</li>)}</ul>
+        </div>
+        <div className="foot">
+          <button type="button" className={"btn " + (overall === "warn" ? "pri" : "danger")} autoFocus onClick={onClose}>รับทราบ</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MissingDialog({ items, onBack, onSkip, skipLabel }) {
-  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "ชั่วโมงนอน", "KSS", "ความเห็นผู้ตรวจ"];
+  const list = items && items.length ? items : ["แอลกอฮอล์", "BP", "PR", "SpO₂", "เวลาเข้านอน", "เวลาตื่นนอน", "ชั่วโมงงีบ (ไม่ได้งีบใส่ 0)", "ชั่วโมงนอนคืนก่อนหน้า", "KSS", "ความเห็นผู้ตรวจ"];
   return (
     <div className="overlay" onKeyDown={(e) => { if (e.key === "Escape") onBack(); }}>
       <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="miss-h">
@@ -567,6 +690,7 @@ function BeforeTab({ date, shift, th, save, toast, names, staff, runs, dbKey }) 
     setWho(null);
     setKss(null);
     setKssWarn(kss != null && kss >= th.kssWarn ? { n: nextN, kss, stop: kss >= th.kssStop, driver } : null);
+    if (v > th.alcMax || (kss != null && kss >= th.kssWarn)) alarm();
     if (v > th.alcMax) setAlertId(id);
     else toast(`บันทึกครั้งที่ ${nextN} แล้ว · ผ่าน`);
   }
@@ -700,7 +824,41 @@ function AlcAlert({ run, save, staff, onClose, onReplace }) {
 }
 
 /* ── หลังออก: AT ── */
-function AfterTab({ date, shift, th, save, toast, runs, reasons }) {
+function EndReview({ review, save, toast, names, shift }) {
+  const rv = review || {};
+  const items = rv.items || {};
+  const driver = rv.driver || names.current || "";
+  const [open, setOpen] = useState(false);
+  const set1 = (patch) => save(Object.fromEntries(Object.entries({ driver, at: hhmm(), ...patch }).map(([k, v]) => [`endReview/${k}`, v])));
+  const showForm = open || rv.status === "issue";
+  return (
+    <section className={"card " + (rv.status === "issue" ? "warn" : "")}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <h2 className="h">จบเวร{shift === "บ่าย" || shift === "ดึก" ? "บ่าย/ดึก" : shift}: พขร. มีเรื่องควรปรับปรุงไหม</h2>
+        <span className="sub">{driver || "พขร."} · ไม่มีอะไรกด “ไม่มี” ครั้งเดียวจบ</span>
+      </div>
+      <div className="seg fit" role="group" aria-label="ผลประเมินจบเวร" style={{ alignSelf: "flex-start" }}>
+        <button type="button" data-v="fit" aria-pressed={rv.status === "ok"} onClick={() => { set1({ status: "ok", items: null, note: null }); setOpen(false); toast("บันทึกแล้ว · ไม่มีเรื่องต้องปรับปรุง"); }}>ไม่มี</button>
+        <button type="button" data-v="unfit" aria-pressed={rv.status === "issue"} onClick={() => { setOpen(true); set1({ status: "issue" }); }}>มี</button>
+      </div>
+      {showForm && rv.status !== "ok" && (
+        <>
+          <div className="checks" style={{ color: "var(--ink)" }}>
+            {L.REVIEW_ITEMS.map(([k, t]) => (
+              <label key={k}><input type="checkbox" style={{ accentColor: "var(--warn-solid)" }} checked={!!items[k]} onChange={(e) => set1({ [`items/${k}`]: e.target.checked || null })} />{t}</label>
+            ))}
+          </div>
+          <label className="fld">รายละเอียด
+            <Field placeholder="เช่น ขับเร็วเกินช่วงถนนสายหลัก" value={rv.note} onCommit={(v) => set1({ note: v || null })} />
+          </label>
+        </>
+      )}
+      {rv.status && <span className="sub">บันทึกแล้ว {rv.at ? `${rv.at} น.` : ""}{rv.status === "issue" ? ` · ${L.reviewIssues(rv).length} ข้อ` : ""}</span>}
+    </section>
+  );
+}
+
+function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }) {
   const [sheetId, setSheetId] = useState(null);
   const departed = runs.filter((x) => L.runCleared(x, th));
   const blocked = runs.filter((x) => !L.runCleared(x, th));
@@ -732,7 +890,7 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons }) {
             <label className={"fld" + (late ? " warn" : "")}>AT (นาที)
               <Field numeric className="inp big" placeholder="ดูจากสถิติแล้วกรอก" value={x.at}
                 onCommit={(v) => save({ [`runs/${x.id}/at`]: v })}
-                onFinal={(v) => { const n = num(v); if (n != null && n > th.atLimit && !L.reasonReady(x)) setSheetId(x.id); }} />
+                onFinal={(v) => { const n = num(v); if (n != null && n > th.atLimit && !L.reasonReady(x)) { setSheetId(x.id); alarm(); } }} />
             </label>
             {late && (
               <>
@@ -755,6 +913,8 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons }) {
       )}
 
       <Msg title="ข้อความไลน์ · ส่งหลังออก" text={L.msgAt(date, shift, runs, th)} toast={toast} />
+
+      <EndReview review={review} save={save} toast={toast} names={names} shift={shift} />
 
       {sheetRun && <ATSheet run={sheetRun} th={th} save={save} toast={toast} reasons={reasons} onClose={() => setSheetId(null)} />}
     </>
@@ -804,6 +964,12 @@ function SummaryTab(props) {
 function SummaryBody({ th, toast, date, reasons, lock }) {
   const [ym, setYm] = useState(date.slice(0, 7));
   const [data, setData] = useState(null);
+  const [rosterMonth, setRosterMonth] = useState(null);
+  useEffect(() => {
+    setRosterMonth(null);
+    const q = query(ref(db, "roster"), orderByKey(), startAt(ym), endAt(ym + "\uf8ff"));
+    return onValue(q, (s) => setRosterMonth(s.val() || {}), () => setRosterMonth({}));
+  }, [ym]);
   useEffect(() => {
     setData(null);
     const q = query(ref(db, "driverCheck"), orderByKey(), startAt(ym), endAt(ym + ""));
@@ -816,10 +982,11 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
   }, [ym]);
 
   const st = useMemo(() => (data ? L.summarize(data, th) : null), [data, th]);
+  const missed = useMemo(() => (data && rosterMonth ? L.noShows(rosterMonth, data, th) : []), [data, rosterMonth, th]);
   const [y, m] = ym.split("-").map(Number);
 
   function downloadCSV() {
-    const blob = new Blob([L.toCSV(data, th)], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([L.toCSV(data, th, missed)], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -840,14 +1007,16 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
       </div>
 
       {!st && <div className="empty">กำลังโหลด…</div>}
-      {st && !data.length && <div className="empty">ยังไม่มีข้อมูลเดือนนี้</div>}
-      {st && data.length > 0 && (
+      {st && !data.length && !missed.length && <div className="empty">ยังไม่มีข้อมูลเดือนนี้</div>}
+      {st && (data.length > 0 || missed.length > 0) && (
         <>
           <div className="stats">
             <div className="stat"><span className="k">ตรวจต้นเวร</span><span className="v">{st.starts}</span><span className="s">ไม่ผ่าน {st.startFail} · ส่ง ER {st.startEr} · ล้าเหลือง {st.fatYellow} แดง {st.fatRed}</span></div>
             <div className="stat"><span className="k">เป่าก่อนออก</span><span className="v">{st.runs}</span><span className="s">พบแอลกอฮอล์ {st.alcPos} ครั้ง</span></div>
             <div className="stat"><span className="k">AT ≤ {th.atLimit} นาที</span><span className="v" style={{ color: "var(--ok)" }}>{st.atN ? Math.round((st.within / st.atN) * 100) + "%" : "-"}</span><span className="s">{st.within}/{st.atN} ครั้งที่กรอก AT</span></div>
             <div className="stat"><span className="k">AT เฉลี่ย / มัธยฐาน</span><span className="v">{fmt(st.mean)} / {fmt(st.median)}</span><span className="s">นาที · สูงสุด {fmt(st.max)}</span></div>
+            <div className="stat"><span className="k">ไม่มาประเมินต้นเวร</span><span className="v" style={{ color: missed.length ? "var(--bad)" : "inherit" }}>{missed.length}</span><span className="s">เวร (เช้า/บ่าย ที่มีชื่อใน ems-check)</span></div>
+            <div className="stat"><span className="k">แต่งกายไม่เรียบร้อย</span><span className="v" style={{ color: st.dressBad ? "var(--warn)" : "inherit" }}>{st.dressBad}</span><span className="s">ครั้ง</span></div>
             <div className="stat"><span className="k">ยังไม่กรอก AT</span><span className="v" style={{ color: st.pendingAt ? "var(--warn)" : "inherit" }}>{st.pendingAt}</span><span className="s">ครั้งที่ออกแล้ว</span></div>
             <div className="stat"><span className="k">AT เกินไม่มีเหตุผล</span><span className="v" style={{ color: st.noReason ? "var(--bad)" : "inherit" }}>{st.noReason}</span><span className="s">ต้องตามเติม</span></div>
           </div>
@@ -879,6 +1048,35 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
             </div>
           </section>
 
+          {st.reviewIssue > 0 && (
+            <section className="card">
+              <h2 className="h">ประเมินจบเวร · เรื่องควรปรับปรุง</h2>
+              <span className="sub">ประเมินแล้ว {st.reviewed} เวร · มีเรื่อง {st.reviewIssue} เวร</span>
+              <div className="tbl"><table><tbody>
+                {Object.entries(st.reviewCount).sort((a, b) => b[1] - a[1]).map(([k, n]) => <tr key={k}><td className="wrap">{k}</td><td className="r">{n}</td></tr>)}
+              </tbody></table></div>
+              <details>
+                <summary>รายละเอียด ({st.reviewList.length})</summary>
+                <div className="tbl"><table>
+                  <thead><tr><th>วันที่</th><th>เวร</th><th>พขร.</th><th>เรื่อง</th></tr></thead>
+                  <tbody>{st.reviewList.map((x, i) => (
+                    <tr key={i}><td>{L.thaiDate(x.date)}</td><td>{x.shift}</td><td className="wrap">{x.driver}</td><td className="wrap">{x.items.join(", ")}{x.note ? ` · ${x.note}` : ""}</td></tr>
+                  ))}</tbody>
+                </table></div>
+              </details>
+            </section>
+          )}
+
+          {missed.length > 0 && (
+            <section className="card">
+              <h2 className="h">ไม่มาประเมินต้นเวร</h2>
+              <div className="tbl"><table>
+                <thead><tr><th>วันที่</th><th>เวร</th><th>พขร. (ตามตารางเวร)</th></tr></thead>
+                <tbody>{missed.map((x) => <tr key={x.key}><td>{L.thaiDate(x.date)}</td><td>{x.shift}</td><td className="wrap">{x.driver}</td></tr>)}</tbody>
+              </table></div>
+            </section>
+          )}
+
           {reasonRows.length > 0 && (
             <section className="card">
               <h2 className="h">เหตุผลที่ AT เกิน {th.atLimit} นาที</h2>
@@ -900,7 +1098,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
             </section>
           )}
 
-          <Msg title="ข้อความสรุปสำหรับไลน์ / ผู้บริหาร" text={L.msgMonth(st, ym, th)} toast={toast} />
+          <Msg title="ข้อความสรุปสำหรับไลน์ / ผู้บริหาร" text={L.msgMonth(st, ym, th, missed.length)} toast={toast} />
           <button type="button" className="btn soft" onClick={downloadCSV}>ดาวน์โหลดไฟล์ Excel (CSV)</button>
         </>
       )}

@@ -165,3 +165,4 @@ details summary { cursor: pointer; font-weight: 700; min-height: 32px; }
 .kss.compact button[aria-pressed=true] { border-color: var(--pri); background: var(--pri); }
 .kss.compact button[aria-pressed=true] b { color: #fff; }
 .sleepsum { font-size: 14.5px; background: var(--field); border-radius: 10px; padding: 8px 12px; }
+.ac-h { position: sticky; top: 0; background: var(--chip); color: var(--muted); font-size: 12px; font-weight: 700; padding: 6px 14px; }
