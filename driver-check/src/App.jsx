@@ -366,27 +366,39 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
           <span className="sub">ถาม พขร.</span>
         </div>
         <div className="grid3">
-          <label className={"fld" + (fat.rules[0].fail ? " bad" : "")}>นอน 24 ชม. ที่ผ่านมา (ชม.)
-            <Field numeric className="inp big" placeholder="เช่น 6" value={start.sleep24} onCommit={(v) => saveStart({ sleep24: v })} />
+          <label className={"fld" + (fat.rules[0].fail ? " bad" : "")}>เข้านอน (เวลา)
+            <Field className="inp big" type="time" value={start.bed} onCommit={(v) => saveStart({ bed: v })} />
           </label>
-          <label className={"fld" + (fat.rules[1].fail ? " bad" : "")}>นอน 48 ชม. ที่ผ่านมา (ชม.)
-            <Field numeric className="inp big" placeholder="เช่น 13" value={start.sleep48} onCommit={(v) => saveStart({ sleep48: v })} />
-          </label>
-          <label className={"fld wide" + (fat.rules[2].fail ? " bad" : "")}>ตื่นนอนล่าสุด (เวลา)
+          <label className={"fld" + (fat.rules[0].fail ? " bad" : "")}>ตื่นนอน (เวลา)
             <Field className="inp big" type="time" value={start.wake} onCommit={(v) => saveStart({ wake: v })} />
           </label>
+          <label className="fld">งีบ (ชม.) · ไม่ได้งีบใส่ 0
+            <Field numeric className="inp big" placeholder="0" value={start.nap} onCommit={(v) => saveStart({ nap: v })} />
+          </label>
+          <label className="fld">คืนก่อนหน้า นอน (ชม.) · ไม่บังคับ
+            <Field numeric className="inp big" placeholder="-" value={start.prevNight} onCommit={(v) => saveStart({ prevNight: v })} />
+          </label>
         </div>
-        <div className="rules">
-          {fat.rules.map((r) => (
-            <div key={r.id}>
-              <span>{r.label}</span>
-              <b className={r.fail == null ? "" : r.fail ? "t-bad" : "t-ok"}>
-                {r.fail == null ? "-" : `${r.fail ? "ไม่ผ่าน" : "ผ่าน"} (${fmt(r.value)}${r.id === "awake" ? ` / ${fmt(num(start.sleep48))}` : ""})`}
-              </b>
-            </div>
-          ))}
-        </div>
-        <span className="sub">ชั่วโมงที่ตื่นคำนวณถึงเวลาจบเวร{shift} ({{ "เช้า": "16:15", "บ่าย": "00:15", "ดึก": "08:15" }[shift]})</span>
+        {fat.sleep.s24 != null && (
+          <div className="sleepsum">
+            นอนหลับ <b>{fmt(fat.sleep.main)}</b> ชม.{fat.sleep.nap ? <> + งีบ <b>{fmt(fat.sleep.nap)}</b></> : null} = <b className={fat.rules[0].fail ? "t-bad" : "t-ok"}>{fmt(fat.sleep.s24)} ชม.</b>
+            {" "}({fat.rules[0].fail ? `น้อยกว่า ${th.sleep24Min} ชม.` : "พอ"})
+          </div>
+        )}
+        {fat.sleep.s48 != null ? (
+          <div className="rules">
+            {fat.rules.slice(1).map((r) => (
+              <div key={r.id}>
+                <span>{r.label}</span>
+                <b className={r.fail == null ? "" : r.fail ? "t-bad" : "t-ok"}>
+                  {r.fail == null ? "-" : `${r.fail ? "ไม่ผ่าน" : "ผ่าน"} (${fmt(r.value)}${r.id === "awake" ? ` / ${fmt(fat.sleep.s48)}` : ""})`}
+                </b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="sub">ถ้าใส่ชั่วโมงนอนคืนก่อนหน้า แอปจะเช็กการนอนสะสม 48 ชม. และชั่วโมงที่ตื่นถึงจบเวรให้ด้วย</span>
+        )}
       </section>
 
       <section className="card">
