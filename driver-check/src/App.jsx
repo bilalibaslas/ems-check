@@ -5,6 +5,13 @@ import * as L from "./logic";
 
 const { SHIFTS, TH_DEF, TH_LABEL, KSS, OBS, REASONS, MONTHS, num, fmt, hhmm } = L;
 
+// อัปเดตเวลาทุก 30 วินาที ใช้นับเวลาที่ยังลบรายการได้
+function useNow(ms = 30000) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), ms); return () => clearInterval(t); }, [ms]);
+  return now;
+}
+
 function useSession(key) {
   const [v, setV] = useState(() => { try { return sessionStorage.getItem(key) === "1"; } catch { return false; } });
   const on = () => { setV(true); try { sessionStorage.setItem(key, "1"); } catch { /* ignore */ } };
@@ -689,14 +696,15 @@ function BeforeTab({ date, shift, th, save, toast, names, staff, runs, dbKey }) 
   function record() {
     const v = num(alc);
     if (v == null) { toast("กรอกค่าแอลกอฮอล์ก่อน"); return; }
-    const blow = { time: hhmm(), alc: v, driver: driver || "", ...(kss != null ? { kss } : {}) };
+    const savedAt = Date.now();
+    const blow = { time: hhmm(), alc: v, driver: driver || "", savedAt, ...(kss != null ? { kss } : {}) };
     let id;
     if (pending) {
       id = last.id;
-      save({ [`runs/${id}/blows`]: [...L.blowsOf(last), blow] });
+      save({ [`runs/${id}/blows`]: [...L.blowsOf(last), blow], [`runs/${id}/savedAt`]: savedAt });
     } else {
       id = push(ref(db, `driverCheck/${dbKey}/runs`)).key;
-      save({ [`runs/${id}`]: { n: nextN, time: blow.time, blows: [blow] } });
+      save({ [`runs/${id}`]: { n: nextN, time: blow.time, blows: [blow], savedAt } });
     }
     setAlc("");
     setWho(null);
@@ -707,8 +715,10 @@ function BeforeTab({ date, shift, th, save, toast, names, staff, runs, dbKey }) 
     else toast(`บันทึกครั้งที่ ${nextN} แล้ว · ผ่าน`);
   }
 
+  useNow(); // ให้หน้าจอนับถอยหลังเวลาที่ยังลบได้
   function del(run) {
-    const p = { [`runs/${run.id}`]: null };
+    if (!L.deleteLeft(run.savedAt, th)) { toast("เลยเวลาที่ลบได้แล้ว"); setConfirmDel(null); return; }
+    const p = { [`runs/${run.id}/deleted`]: { at: Date.now(), n: run.n || null } };
     runs.filter((x) => (x.n || 0) > (run.n || 0)).forEach((x) => { p[`runs/${x.id}/n`] = (x.n || 0) - 1; });
     save(p);
     setConfirmDel(null);
@@ -773,15 +783,8 @@ function BeforeTab({ date, shift, th, save, toast, names, staff, runs, dbKey }) 
                   {l.kss != null ? ` · KSS ${l.kss}` : ""}
                   {b.length > 1 ? ` · รอบก่อน ${b.slice(0, -1).map((y) => `${y.alc}`).join(", ")} mg/dl` : ""}
                   {" · "}
-                  {confirmDel === x.id ? (
-                    <>
-                      ลบครั้งที่ {x.n}?{" "}
-                      <button type="button" className="link" onClick={() => setConfirmDel(null)}>ยกเลิก</button>{" "}
-                      <button type="button" className="link" style={{ color: "var(--bad)" }} onClick={() => del(x)}>ลบ</button>
-                    </>
-                  ) : (
-                    <button type="button" className="link" style={{ color: "var(--muted)" }} onClick={() => setConfirmDel(x.id)}>ลบ</button>
-                  )}
+                  <DeleteCtl left={L.deleteLeft(x.savedAt, th)} label={`ครั้งที่ ${x.n}`}
+                    confirming={confirmDel === x.id} onAsk={() => setConfirmDel(x.id)} onCancel={() => setConfirmDel(null)} onDelete={() => del(x)} />
                 </span>
               </div>
             );
@@ -870,11 +873,62 @@ function EndReview({ review, save, toast, names, shift }) {
   );
 }
 
+// ปุ่มลบ: แสดงเฉพาะช่วงเวลาที่ยังลบได้ เลยเวลาแล้วขึ้นว่าล็อก
+function DeleteCtl({ left, label, confirming, onAsk, onCancel, onDelete }) {
+  if (!left) return <span className="locked">ล็อกแล้ว</span>;
+  if (confirming) {
+    return (
+      <span className="delask">
+        ลบ{label}?{" "}
+        <button type="button" className="link" onClick={onCancel}>ยกเลิก</button>{" "}
+        <button type="button" className="link" style={{ color: "var(--bad)", fontWeight: 800 }} onClick={onDelete}>ลบ</button>
+      </span>
+    );
+  }
+  return <button type="button" className="link" style={{ color: "var(--muted)" }} onClick={onAsk}>ลบ (เหลือ {left} นาที)</button>;
+}
+
 function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }) {
-  const [sheetId, setSheetId] = useState(null);
+  useNow(); // ให้หน้าจอนับถอยหลังเวลาที่ยังลบได้
   const departed = runs.filter((x) => L.runCleared(x, th));
   const blocked = runs.filter((x) => !L.runCleared(x, th));
-  const sheetRun = runs.find((x) => x.id === sheetId);
+  const waiting = departed.filter((x) => num(x.at) == null);
+  const done = departed.filter((x) => num(x.at) != null);
+  const [selId, setSelId] = useState(null);
+  const sel = waiting.find((x) => x.id === selId) || waiting[0] || null;
+  const [atVal, setAtVal] = useState("");
+  const [picked, setPicked] = useState([]);
+  const [note, setNote] = useState("");
+  const [confirmDel, setConfirmDel] = useState(null);
+  const at = num(atVal);
+  const late = at != null && at > th.atLimit;
+  const ready = at != null && at >= 0 && (!late || L.reasonReady({ reasons: picked, reasonNote: note }));
+  useEffect(() => { if (late) alarm(); }, [late]);
+  useEffect(() => { setAtVal(""); setPicked([]); setNote(""); }, [sel && sel.id]);
+
+  function record() {
+    if (!sel || !ready) return;
+    save({
+      [`runs/${sel.id}/at`]: at,
+      [`runs/${sel.id}/reasons`]: late ? picked : null,
+      [`runs/${sel.id}/reason`]: null,
+      [`runs/${sel.id}/reasonNote`]: late ? (note.trim() || null) : null,
+      [`runs/${sel.id}/atSavedAt`]: Date.now(),
+    });
+    toast(`บันทึก AT ครั้งที่ ${sel.n} แล้ว`);
+    setSelId(null);
+    setAtVal(""); setPicked([]); setNote("");
+  }
+  function delAt(x) {
+    if (!L.deleteLeft(x.atSavedAt, th)) { toast("เลยเวลาที่ลบได้แล้ว"); setConfirmDel(null); return; }
+    save({
+      [`runs/${x.id}/atHistory/${Date.now()}`]: { at: num(x.at), reasons: L.reasonsOf(x), note: x.reasonNote || null, savedAt: x.atSavedAt || null, deletedAt: Date.now() },
+      [`runs/${x.id}/at`]: null, [`runs/${x.id}/reasons`]: null, [`runs/${x.id}/reason`]: null,
+      [`runs/${x.id}/reasonNote`]: null, [`runs/${x.id}/atSavedAt`]: null,
+    });
+    setConfirmDel(null);
+    toast(`ลบ AT ครั้งที่ ${x.n} แล้ว กรอกใหม่ได้ด้านบน`);
+  }
 
   return (
     <>
@@ -885,40 +939,79 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }
 
       {!runs.length && <div className="empty">ยังไม่มีการออก EMS ในเวรนี้<br />เป่าก่อนออกที่แท็บ “ก่อนออก” แล้วรายการจะขึ้นที่นี่</div>}
 
-      {departed.map((x) => {
-        const at = num(x.at);
-        const late = at != null && at > th.atLimit;
-        const lb = L.lastBlow(x) || {};
-        const cls = at == null ? "dash" : late ? (L.reasonReady(x) ? "warn" : "bad") : "";
-        const picked = L.reasonsOf(x);
-        return (
-          <section className={"card " + cls} key={x.id}>
-            <div className="row">
-              <h2 className="h">ครั้งที่ {x.n} · ออก {lb.time || x.time}</h2>
-              {at == null ? <span className="pill p-mute">รอกรอก AT</span>
-                : late ? <span className="pill p-warn">เกิน {th.atLimit} นาที</span>
-                : <span className="pill p-ok">ไม่เกิน {th.atLimit} นาที</span>}
+      {sel ? (
+        <section className="card focus">
+          <div className="row">
+            <h2 className="h">กรอก AT ครั้งที่ {sel.n}</h2>
+            <span className="sub">ออก {(L.lastBlow(sel) || {}).time || sel.time} น.</span>
+          </div>
+          {waiting.length > 1 && (
+            <div className="row" style={{ justifyContent: "flex-start", gap: 6 }}>
+              <span className="sub">รอกรอก:</span>
+              <div className="chips" role="group" aria-label="เลือกครั้งที่จะกรอก">
+                {waiting.map((x) => (
+                  <button key={x.id} type="button" aria-pressed={x.id === sel.id} onClick={() => setSelId(x.id)}>ครั้งที่ {x.n}</button>
+                ))}
+              </div>
             </div>
-            <label className={"fld" + (late ? " warn" : "")}>AT (นาที)
-              <Field numeric className="inp big" placeholder="ดูจากสถิติแล้วกรอก" value={x.at}
-                onCommit={(v) => save({ [`runs/${x.id}/at`]: v })}
-                onFinal={(v) => { const n = num(v); if (n != null && n > th.atLimit && !L.reasonReady(x)) { setSheetId(x.id); alarm(); } }} />
+          )}
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+            <label className={"fld" + (late ? " warn" : "")} style={{ flex: "1 1 auto" }}>AT (นาที){late ? ` · เกิน ${th.atLimit} นาที` : ""}
+              <input className="inp big" inputMode="decimal" placeholder="ดูจากสถิติ" value={atVal} autoComplete="off"
+                onChange={(e) => setAtVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") record(); }} />
             </label>
-            {late && (
-              <>
-                <div className="fld warn">
-                  <span>เหตุผล (ต้องระบุ · เลือกได้หลายข้อ)</span>
-                  <ReasonChips reasons={reasons} value={picked}
-                    onChange={(list) => save({ [`runs/${x.id}/reasons`]: list.length ? list : null, [`runs/${x.id}/reason`]: null })} />
+            <button type="button" className="btn pri" style={{ height: 50 }} disabled={!ready} onClick={record}>บันทึก</button>
+          </div>
+          {late && (
+            <>
+              <div className="fld warn">
+                <span>เลือกเหตุผลก่อนบันทึก (ได้หลายข้อ)</span>
+                <ReasonChips reasons={reasons} value={picked} onChange={setPicked} />
+              </div>
+              <label className="fld">{picked.includes("อื่นๆ") ? "ระบุเหตุผลอื่นๆ" : "รายละเอียดเพิ่ม (ไม่บังคับ)"}
+                <input className="inp" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น ศูนย์ยืนยันพิกัดนาน" autoComplete="off" />
+              </label>
+            </>
+          )}
+          <span className="sub">
+            {num(th.deleteWindow) ? `บันทึกแล้วแก้ไม่ได้ กรอกผิดลบได้ภายใน ${th.deleteWindow} นาที แล้วกรอกใหม่` : "บันทึกแล้วแก้และลบไม่ได้ ตรวจตัวเลขก่อนกดบันทึก"}
+          </span>
+        </section>
+      ) : departed.length > 0 ? (
+        <div className="verdict v-ok">
+          <strong>กรอก AT ครบทุกครั้งแล้ว</strong>
+          <span>ออกใหม่เมื่อไร เป่าที่แท็บ “ก่อนออก” แล้วช่องกรอกจะกลับมาเอง</span>
+        </div>
+      ) : null}
+
+      {done.length > 0 && (
+        <>
+          <div className="row">
+            <h2 className="h">รายงานแล้วในเวรนี้</h2>
+            <span className="pill p-mute">{done.length} จาก {departed.length} ครั้ง</span>
+          </div>
+          <section className="card list">
+            {done.map((x) => {
+              const v = num(x.at);
+              const over = v > th.atLimit;
+              const saved = x.atSavedAt ? L.hhmm(new Date(x.atSavedAt)) : "";
+              return (
+                <div className={"runrow" + (confirmDel === x.id ? " asking" : "")} key={x.id}>
+                  <b>ครั้งที่ {x.n}</b>
+                  <span className="sub num">ออก {(L.lastBlow(x) || {}).time || x.time}</span>
+                  <b className="num">{fmt(v)} นาที</b>
+                  <span className={"pill " + (over ? "p-warn" : "p-ok")}>{over ? `เกิน ${th.atLimit}` : `ไม่เกิน ${th.atLimit}`}</span>
+                  <span className="who">
+                    {over ? `${L.reasonText(x) || "ยังไม่ระบุเหตุผล"} · ` : ""}{saved ? `บันทึก ${saved} · ` : ""}
+                    <DeleteCtl left={L.deleteLeft(x.atSavedAt, th)} label={` AT ครั้งที่ ${x.n} แล้วกรอกใหม่`}
+                      confirming={confirmDel === x.id} onAsk={() => setConfirmDel(x.id)} onCancel={() => setConfirmDel(null)} onDelete={() => delAt(x)} />
+                  </span>
                 </div>
-                <label className="fld">{picked.includes("อื่นๆ") ? "ระบุเหตุผลอื่นๆ" : "รายละเอียดเพิ่ม (ไม่บังคับ)"}
-                  <Field placeholder="เช่น ศูนย์ยืนยันพิกัดนาน" value={x.reasonNote} onCommit={(v) => save({ [`runs/${x.id}/reasonNote`]: v || null })} />
-                </label>
-              </>
-            )}
+              );
+            })}
           </section>
-        );
-      })}
+        </>
+      )}
 
       {blocked.length > 0 && (
         <div className="empty">ครั้งที่ {blocked.map((x) => x.n).join(", ")} ยังไม่ผ่านแอลกอฮอล์ จึงยังไม่มี AT</div>
@@ -927,42 +1020,7 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }
       <Msg title="ข้อความไลน์ · ส่งหลังออก" text={L.msgAt(date, shift, runs, th)} toast={toast} />
 
       <EndReview review={review} save={save} toast={toast} names={names} shift={shift} />
-
-      {sheetRun && <ATSheet run={sheetRun} th={th} save={save} toast={toast} reasons={reasons} onClose={() => setSheetId(null)} />}
     </>
-  );
-}
-
-function ATSheet({ run, th, save, toast, onClose, reasons }) {
-  const [picked, setPicked] = useState(L.reasonsOf(run));
-  const [note, setNote] = useState(run.reasonNote || "");
-  const lb = L.lastBlow(run) || {};
-  const ready = L.reasonReady({ reasons: picked, reasonNote: note });
-  return (
-    <div className="overlay bottom" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      <div className="sheet" role="alertdialog" aria-modal="true" aria-labelledby="at-h">
-        <div className="grab" />
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div className="ic"><ClockIcon /></div>
-          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <b id="at-h" style={{ fontSize: 19 }}>AT {fmt(num(run.at))} นาที เกินเกณฑ์ {th.atLimit} นาที</b>
-            <span className="sub">ครั้งที่ {run.n} · ออก {lb.time || run.time} น. · ต้องระบุเหตุผล</span>
-          </div>
-        </div>
-        <b style={{ fontSize: 14 }}>เหตุผล (เลือกได้หลายข้อ)</b>
-        <ReasonChips reasons={reasons} value={picked} onChange={setPicked} />
-        <label className="fld">{picked.includes("อื่นๆ") ? "ระบุเหตุผลอื่นๆ" : "รายละเอียดเพิ่ม (ไม่บังคับ)"}
-          <input className="inp" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น ศูนย์ยืนยันพิกัดนาน" autoComplete="off" />
-        </label>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button type="button" className="btn soft" style={{ flex: 1 }} onClick={onClose}>แก้ตัวเลข AT</button>
-          <button type="button" className="btn pri" style={{ flex: 1.4 }} disabled={!ready}
-            onClick={() => { save({ [`runs/${run.id}/reasons`]: picked, [`runs/${run.id}/reason`]: null, [`runs/${run.id}/reasonNote`]: note.trim() || null }); toast("บันทึกเหตุผลแล้ว"); onClose(); }}>
-            บันทึกเหตุผล
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1029,6 +1087,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
             <div className="stat"><span className="k">AT เฉลี่ย / มัธยฐาน</span><span className="v">{fmt(st.mean)} / {fmt(st.median)}</span><span className="s">นาที · สูงสุด {fmt(st.max)}</span></div>
             <div className="stat"><span className="k">ไม่มาประเมินต้นเวร</span><span className="v" style={{ color: missed.length ? "var(--bad)" : "inherit" }}>{missed.length}</span><span className="s">เวร (เช้า/บ่าย ที่มีชื่อใน ems-check)</span></div>
             <div className="stat"><span className="k">แต่งกายไม่เรียบร้อย</span><span className="v" style={{ color: st.dressBad ? "var(--warn)" : "inherit" }}>{st.dressBad}</span><span className="s">ครั้ง</span></div>
+            <div className="stat"><span className="k">รายการที่ถูกลบ</span><span className="v">{st.deletedBlows + st.deletedAts}</span><span className="s">เป่า {st.deletedBlows} · AT {st.deletedAts} (ดูใน CSV)</span></div>
             <div className="stat"><span className="k">ยังไม่กรอก AT</span><span className="v" style={{ color: st.pendingAt ? "var(--warn)" : "inherit" }}>{st.pendingAt}</span><span className="s">ครั้งที่ออกแล้ว</span></div>
             <div className="stat"><span className="k">AT เกินไม่มีเหตุผล</span><span className="v" style={{ color: st.noReason ? "var(--bad)" : "inherit" }}>{st.noReason}</span><span className="s">ต้องตามเติม</span></div>
           </div>

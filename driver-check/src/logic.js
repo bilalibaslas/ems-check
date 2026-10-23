@@ -27,6 +27,7 @@ export const TH_DEF = {
   dbpHigh: 100, dbpCrisis: 120,
   prLow: 50, prHigh: 110, prCrisis: 130, spo2Low: 94,
   sleep24Min: 5, sleep48Min: 12, kssWarn: 7, kssStop: 8,
+  deleteWindow: 15,
 };
 export const TH_LABEL = {
   alcMax: "แอลกอฮอล์สูงสุดที่ผ่าน (mg/dl)",
@@ -44,6 +45,7 @@ export const TH_LABEL = {
   sleep48Min: "นอนใน 48 ชม. ขั้นต่ำ (ชม.)",
   kssWarn: "KSS ตั้งแต่ → เหลือง",
   kssStop: "KSS ตั้งแต่ → แดง",
+  deleteWindow: "ลบรายการได้ภายใน (นาที) · 0 = ห้ามลบ",
 };
 
 // Karolinska Sleepiness Scale (แปลไทยโดยผู้พัฒนา ยังไม่ใช่ฉบับแปลที่ผ่านการตรวจสอบ)
@@ -269,10 +271,22 @@ export function msgStart(date, shift, s, r, names) {
 }
 
 /* ── ก่อนออก / หลังออก ── */
+// รายการที่ถูกลบไม่หายจากฐานข้อมูล แค่ติดป้าย deleted (เก็บประวัติไว้ตรวจสอบย้อนหลัง)
 export function sortedRuns(runs) {
   return Object.entries(runs || {})
     .map(([id, r]) => ({ id, ...r }))
+    .filter((r) => !r.deleted)
     .sort((a, b) => (a.n || 0) - (b.n || 0));
+}
+export function deletedRuns(runs) {
+  return Object.entries(runs || {}).map(([id, r]) => ({ id, ...r })).filter((r) => r.deleted);
+}
+// ลบได้เฉพาะภายในเวลาที่กำหนดหลังบันทึก (กันการแก้ย้อนหลัง)
+export function deleteLeft(savedAt, th, now = Date.now()) {
+  const w = num(th.deleteWindow) || 0;
+  if (!w || !savedAt) return 0;
+  const left = savedAt + w * 60000 - now;
+  return left > 0 ? Math.ceil(left / 60000) : 0;
 }
 export const blowsOf = (r) => (Array.isArray(r.blows) ? r.blows : Object.values(r.blows || {})).filter(Boolean);
 export const lastBlow = (r) => { const b = blowsOf(r); return b[b.length - 1] || null; };
@@ -364,7 +378,7 @@ export function startsOf(d) {
 
 export function summarize(list, th) {
   const st = {
-    shifts: list.length, starts: 0, dressBad: 0, reviewed: 0, reviewIssue: 0, reviewCount: {}, reviewList: [], startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
+    shifts: list.length, starts: 0, dressBad: 0, deletedBlows: 0, deletedAts: 0, reviewed: 0, reviewIssue: 0, reviewCount: {}, reviewList: [], startFail: 0, startEr: 0, startAlc: 0, fatYellow: 0, fatRed: 0,
     runs: 0, departed: 0, alcPos: 0, atN: 0, within: 0, noReason: 0, pendingAt: 0,
     ats: [], reasons: {}, lateList: [],
     byShift: Object.fromEntries(SHIFTS.map((s) => [s, { runs: 0, atN: 0, sum: 0, late: 0 }])),
@@ -391,6 +405,8 @@ export function summarize(list, th) {
         st.reviewList.push({ date: d.date, shift: d.shift, driver: d.endReview.driver || "", items, note: d.endReview.note || "" });
       }
     }
+    st.deletedBlows += deletedRuns(d.runs).length;
+    Object.values(d.runs || {}).forEach((x) => { st.deletedAts += Object.keys((x && x.atHistory) || {}).length; });
     sortedRuns(d.runs).forEach((x) => {
       st.runs++;
       const bs = st.byShift[d.shift] || st.byShift["เช้า"];
@@ -467,6 +483,17 @@ export function toCSV(list, th, noShowList = []) {
     if (!rv || !rv.status) return;
     rows.push(["ประเมินจบเวร", d.date, d.shift, "", rv.at || "", rv.driver || "", ...Array(13).fill(""),
       rv.status === "ok" ? "ไม่มีเรื่องต้องปรับปรุง" : "ควรปรับปรุง: " + reviewIssues(rv).join(", "), "", "", "", rv.note || ""]);
+  });
+  list.forEach((d) => {
+    deletedRuns(d.runs).forEach((x) => {
+      const b = lastBlow(x) || {};
+      rows.push(["ลบแล้ว (เป่าก่อนออก)", d.date, d.shift, x.deleted.n ?? x.n ?? "", b.time || "", b.driver || "", b.alc ?? "", ...Array(16).fill(""), `ลบเมื่อ ${new Date(x.deleted.at).toLocaleString("th-TH")}`]);
+    });
+    sortedRuns(d.runs).forEach((x) => {
+      Object.values(x.atHistory || {}).forEach((h) => {
+        rows.push(["ลบแล้ว (AT)", d.date, d.shift, x.n, "", "", "", ...Array(13).fill(""), h.at ?? "", reasonText({ reasons: h.reasons, reasonNote: h.note }), "", `ลบเมื่อ ${new Date(h.deletedAt).toLocaleString("th-TH")}`]);
+      });
+    });
   });
   noShowList.forEach((x) => {
     rows.push(["ไม่มาประเมิน", x.date, x.shift, "", "", x.driver, ...Array(13).fill(""), "ไม่มาประเมินต้นเวร", "", "", "", ""]);
