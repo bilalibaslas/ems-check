@@ -102,7 +102,10 @@ function rosterKey(y,m,d,shift){return `${dateStr(y,m,d)}_${shift}`;}
 // พขร. เวรบ่ายและดึกบันทึกรวมเป็น "บ่าย/ดึก" ซึ่ง Firebase เก็บซ้อนเป็น records/{วันที่}_บ่าย/ดึก_driv
 function drivPath(y,m,d,shift){return shift==="เช้า"?`records/${recKey(y,m,d,"เช้า","driv")}`:`records/${dateStr(y,m,d)}_บ่าย/ดึก_driv`;}
 function getEntry(allData,y,m,d,shift,roleId){
-  if(roleId==="driv"&&shift!=="เช้า") return allData[`${dateStr(y,m,d)}_บ่าย`]?.["ดึก_driv"];
+  // พขร. บ่าย/ดึก (16:15–08:15) เก็บที่ records/{วันที่}_บ่าย/ดึก_driv
+  // เผื่อข้อมูลเก่าที่ถูกบันทึกเป็น _บ่าย_driv หรือ _ดึก_driv (ก่อนแก้ให้เลือกเวรบ่าย/ดึกอัตโนมัติ)
+  if(roleId==="driv"&&shift!=="เช้า") return allData[`${dateStr(y,m,d)}_บ่าย`]?.["ดึก_driv"]
+    || allData[recKey(y,m,d,"บ่าย","driv")] || allData[recKey(y,m,d,"ดึก","driv")];
   return allData[recKey(y,m,d,shift,roleId)];
 }
 function roleTotal(roleId){
@@ -2533,6 +2536,11 @@ export default function App(){
   const [view,setView]=useState("check");
   const [selYear,setSelYear]=useState(shiftYear); const [selMonth,setSelMonth]=useState(shiftMonth);
   const [selDay,setSelDay]=useState(shiftDay); const [selShift,setSelShift]=useState(autoShift);
+  // พขร. มีแค่ 2 เวร: เช้า กับ บ่าย/ดึก (เข้า 16:15 ออก 08:15 วันถัดไป) เปิดแอปช่วงบ่ายหรือดึกให้เลือก "บ่าย/ดึก" ให้เอง
+  useEffect(()=>{
+    if(myRole==="driv"&&(selShift==="บ่าย"||selShift==="ดึก")) setSelShift("บ่าย/ดึก");
+    else if(myRole!=="driv"&&selShift==="บ่าย/ดึก") setSelShift(autoShift);
+  },[myRole,selShift,autoShift]);
   const [equipment,setEquipment]=useState(DEFAULT_EQUIPMENT);
   const [pinUnlocked,setPinUnlocked]=useState(()=>{const t=ls(PIN_SESSION_KEY,0);return t&&(Date.now()-t)<8*60*60*1000;});
 
