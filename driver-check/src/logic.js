@@ -4,6 +4,8 @@ export const MONTHS = ["มกราคม","กุมภาพันธ์","�
 export const SHIFTS = ["เช้า", "บ่าย", "ดึก"];
 // เวลาจบเวรของ พขร. (นาทีของวัน): เช้า 08:15–16:15, บ่าย/ดึก 16:15–08:15 ของอีกวัน
 const SHIFT_END = { "เช้า": 16 * 60 + 15, "บ่าย": 8 * 60 + 15, "ดึก": 8 * 60 + 15 };
+// พขร. มี 2 เวร: เช้า และ บ่าย/ดึก (บ่ายกับดึกพ่วงกัน 16:15–08:15)
+export const shiftLabel = (s) => (s === "เช้า" ? "เช้า" : "บ่าย/ดึก");
 export const SHIFT_END_TEXT = { "เช้า": "16:15", "บ่าย": "08:15 ของอีกวัน", "ดึก": "08:15" };
 
 // ประเมินการปฏิบัติงานตอนจบเวร (รายงานเฉพาะเมื่อมีเรื่องควรปรับปรุง)
@@ -243,7 +245,7 @@ export const fatigueLabel = (l) => FAT_TH[l] || "-";
 export function msgStart(date, shift, s, r, names) {
   s = s || {};
   const fat = r.fat || { level: "none" };
-  const L = ["รายงานการตรวจความพร้อมพนักงานขับรถ ต้นเวร", `เวร ${shift} วันที่ ${thaiDate(date)}`];
+  const L = ["รายงานการตรวจความพร้อมพนักงานขับรถ ต้นเวร", `เวร ${shiftLabel(shift)} วันที่ ${thaiDate(date)}`];
   if (names.driver) L.push(`พขร. ${names.driver}`);
   L.push(`1. ปริมาณแอลกอฮอล์ ${s.alc ?? "-"} mg/dl`);
   L.push(`2. BP ${s.sbp ?? "-"}/${s.dbp ?? "-"} mmHg  PR ${s.pr ?? "-"} /min${s.spo2 != null && s.spo2 !== "" ? `  SpO2 ${s.spo2}%` : ""}`);
@@ -464,7 +466,7 @@ export function toCSV(list, th, noShowList = []) {
     startsOf(d).forEach((s) => {
       const r = evalStart(s, th, d.shift);
       if (r.level === "none") return;
-      rows.push(["ต้นเวร", d.date, d.shift, "", s.time, s.driver || s.rosterDriver, s.alc, s.sbp, s.dbp, s.pr, s.spo2,
+      rows.push(["ต้นเวร", d.date, shiftLabel(d.shift), "", s.time, s.driver || s.rosterDriver, s.alc, s.sbp, s.dbp, s.pr, s.spo2,
         s.bed, s.wake, s.nap, fmt(r.fat.sleep.s24), r.fat.sleep.s48 == null ? "" : fmt(r.fat.sleep.s48), s.kss, fatigueLabel(r.fat.level), { ok: "เรียบร้อย", bad: "ไม่เรียบร้อย" }[s.dress] || "",
         { ok: "ผ่าน", caution: "ผ่านแบบมีมาตรการ", fail: "ไม่ผ่าน", er: "ไม่ผ่าน-ส่ง ER", pending: "ไม่ครบ" }[r.level], "", "",
         s.assessor || s.rosterAemt, [s.note, s.substitute && `คนแทน: ${s.substitute}`].filter(Boolean).join(" · ")]);
@@ -496,7 +498,7 @@ export function toCSV(list, th, noShowList = []) {
     });
   });
   noShowList.forEach((x) => {
-    rows.push(["ไม่มาประเมิน", x.date, x.shift, "", "", x.driver, ...Array(13).fill(""), "ไม่มาประเมินต้นเวร", "", "", "", ""]);
+    rows.push(["ไม่มาประเมิน", x.date, shiftLabel(x.shift), "", "", x.driver, ...Array(13).fill(""), "ไม่มาประเมินต้นเวร", "", "", "", ""]);
   });
   return "﻿" + rows.map((r) => r.map(esc).join(",")).join("\n");
 }

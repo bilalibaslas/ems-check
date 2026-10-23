@@ -231,6 +231,11 @@ export default function App() {
   const key = `${date}_${shift}`;
   const doc = useValue(`driverCheck/${key}`, {});
   const roster = useValue(`roster/${key}`, {});
+  // ต้นเวร พขร. มี 2 เวร: เช้า กับ บ่าย/ดึก (16:15–08:15) ผลต้นเวรของบ่าย/ดึกเก็บที่เอกสารเวรบ่าย
+  const startShift = shift === "ดึก" ? "บ่าย" : shift;
+  const startKey = `${date}_${startShift}`;
+  const startDoc = useValue(`driverCheck/${startKey}`, {});
+  const startRoster = useValue(`roster/${startKey}`, {});
   const thRaw = useValue("driverCheckConfig/thresholds", {});
   const th = useMemo(() => ({ ...TH_DEF, ...(thRaw || {}) }), [thRaw]);
   const staffRaw = useValue("staff", {});
@@ -252,12 +257,14 @@ export default function App() {
 
   // นับข้อมูลที่ยังส่งไม่ถึง Firebase (ค้างอยู่ในหน่วยความจำของแอประหว่างออฟไลน์)
   const [pending, setPending] = useState(0);
-  const save = (patch) => {
+  const saveTo = (k, sh) => (patch) => {
     setPending((n) => n + 1);
-    return update(ref(db, `driverCheck/${key}`), { ...patch, date, shift, updatedAt: Date.now() })
+    return update(ref(db, `driverCheck/${k}`), { ...patch, date, shift: sh, updatedAt: Date.now() })
       .catch(() => toast("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง"))
       .finally(() => setPending((n) => Math.max(0, n - 1)));
   };
+  const save = saveTo(key, shift);
+  const saveStartDoc = saveTo(startKey, startShift);
   useEffect(() => {
     if (!pending) return undefined;
     const h = (e) => { e.preventDefault(); e.returnValue = ""; };
@@ -265,12 +272,13 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", h);
   }, [pending]);
 
-  const start = (doc && doc.start) || {};
+  const start = (startDoc && startDoc.start) || {};
   const r = roster || {};
+  const sr = startRoster || {};
   const names = {
-    rosterDriver: r.driv || "",
-    rosterAemt: r.aemt || "",
-    vehicle: r.vehicle || "",
+    rosterDriver: sr.driv || r.driv || "",
+    rosterAemt: sr.aemt || r.aemt || "",
+    vehicle: sr.vehicle || r.vehicle || "",
   };
   names.driver = start.driver || names.rosterDriver;
   names.assessor = start.assessor || names.rosterAemt;
@@ -282,13 +290,13 @@ export default function App() {
     if (!start.time && !("time" in o)) p["start/time"] = hhmm();
     p["start/rosterDriver"] = names.rosterDriver || null;
     p["start/rosterAemt"] = names.rosterAemt || null;
-    return save(p);
+    return saveStartDoc(p);
   };
 
   const runs = L.sortedRuns(doc && doc.runs);
   const lastRun = runs[runs.length - 1];
   const beforeDot = lastRun && !L.runCleared(lastRun, th) ? "!" : "";
-  const startRes = L.evalStart(start, th, shift);
+  const startRes = L.evalStart(start, th, startShift);
   const startDot = startRes.level === "pending" ? "!" : "";
   const [leaveWarn, setLeaveWarn] = useState(null);
   const goTab = (id) => {
@@ -297,8 +305,8 @@ export default function App() {
   };
   const afterCount = runs.filter((x) => L.runCleared(x, th) && (num(x.at) == null || (num(x.at) > th.atLimit && !L.reasonReady(x)))).length;
 
-  const loading = doc === undefined;
-  const common = { date, shift, th, save, toast, names, staff, runs, reasons, review: (doc && doc.endReview) || null };
+  const loading = doc === undefined || (tab === "start" && startDoc === undefined);
+  const common = { date, shift, th, save, toast, names, staff, runs, reasons, review: (startDoc && startDoc.endReview) || null, saveReview: saveStartDoc };
 
   return (
     <div className="app">
@@ -338,7 +346,7 @@ export default function App() {
 
       <main className="main">
         {tab !== "summary" && loading && <div className="empty">กำลังโหลด…</div>}
-        {tab === "start" && !loading && <StartTab key={key} {...common} start={start} saveStart={saveStart} />}
+        {tab === "start" && !loading && <StartTab key={startKey} {...common} shift={startShift} save={saveStartDoc} start={start} saveStart={saveStart} />}
         {tab === "before" && !loading && <BeforeTab {...common} dbKey={key} />}
         {tab === "after" && !loading && <AfterTab {...common} />}
         {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} />}
@@ -406,12 +414,13 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
       {res.level === "none" && L.ASSESS_SHIFTS.includes(shift) && L.shiftEnded(date, shift) && (
         <div className="verdict v-er" role="alert">
           <strong>ไม่มาประเมินต้นเวร</strong>
-          <span>เวร{shift} วันที่ {L.thaiDate(date)} จบแล้ว · {names.rosterDriver || "พขร. (ยังไม่ลงชื่อใน ems-check)"} ไม่ได้ตรวจความพร้อมก่อนปฏิบัติงาน</span>
+          <span>เวร{L.shiftLabel(shift)} วันที่ {L.thaiDate(date)} จบแล้ว · {names.rosterDriver || "พขร. (ยังไม่ลงชื่อใน ems-check)"} ไม่ได้ตรวจความพร้อมก่อนปฏิบัติงาน</span>
         </div>
       )}
-      {shift === "ดึก" && (
-        <div className="verdict v-none"><span>เวรดึกใช้ผลตรวจต้นเวรของเวรบ่าย (พขร. บ่าย/ดึก เป็นคนเดียวกัน) · ถ้าเปลี่ยนคนกลางเวร ตรวจที่นี่ได้</span></div>
-      )}
+      <div className="shifthead">
+        <b>ต้นเวร พขร. · เวร{L.shiftLabel(shift)}</b>
+        <span>{shift === "เช้า" ? `${L.thaiDate(date)} · 08:15–16:15` : `เข้า 16:15 วันที่ ${L.thaiDate(date)} · ออก 08:15 วันถัดไป`}</span>
+      </div>
       <section className="card roster">
         <div className="row">
           <h2 className="h" style={{ color: "var(--roster)" }}>ผู้ปฏิบัติงานเวรนี้</h2>
@@ -888,7 +897,7 @@ function DeleteCtl({ left, label, confirming, onAsk, onCancel, onDelete }) {
   return <button type="button" className="link" style={{ color: "var(--muted)" }} onClick={onAsk}>ลบ (เหลือ {left} นาที)</button>;
 }
 
-function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }) {
+function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names, saveReview }) {
   useNow(); // ให้หน้าจอนับถอยหลังเวลาที่ยังลบได้
   const departed = runs.filter((x) => L.runCleared(x, th));
   const blocked = runs.filter((x) => !L.runCleared(x, th));
@@ -1019,7 +1028,7 @@ function AfterTab({ date, shift, th, save, toast, runs, reasons, review, names }
 
       <Msg title="ข้อความไลน์ · ส่งหลังออก" text={L.msgAt(date, shift, runs, th)} toast={toast} />
 
-      <EndReview review={review} save={save} toast={toast} names={names} shift={shift} />
+      <EndReview review={review} save={saveReview} toast={toast} names={names} shift={shift} />
     </>
   );
 }
@@ -1131,7 +1140,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
                 <div className="tbl"><table>
                   <thead><tr><th>วันที่</th><th>เวร</th><th>พขร.</th><th>เรื่อง</th></tr></thead>
                   <tbody>{st.reviewList.map((x, i) => (
-                    <tr key={i}><td>{L.thaiDate(x.date)}</td><td>{x.shift}</td><td className="wrap">{x.driver}</td><td className="wrap">{x.items.join(", ")}{x.note ? ` · ${x.note}` : ""}</td></tr>
+                    <tr key={i}><td>{L.thaiDate(x.date)}</td><td>{L.shiftLabel(x.shift)}</td><td className="wrap">{x.driver}</td><td className="wrap">{x.items.join(", ")}{x.note ? ` · ${x.note}` : ""}</td></tr>
                   ))}</tbody>
                 </table></div>
               </details>
@@ -1143,7 +1152,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
               <h2 className="h">ไม่มาประเมินต้นเวร</h2>
               <div className="tbl"><table>
                 <thead><tr><th>วันที่</th><th>เวร</th><th>พขร. (ตามตารางเวร)</th></tr></thead>
-                <tbody>{missed.map((x) => <tr key={x.key}><td>{L.thaiDate(x.date)}</td><td>{x.shift}</td><td className="wrap">{x.driver}</td></tr>)}</tbody>
+                <tbody>{missed.map((x) => <tr key={x.key}><td>{L.thaiDate(x.date)}</td><td>{L.shiftLabel(x.shift)}</td><td className="wrap">{x.driver}</td></tr>)}</tbody>
               </table></div>
             </section>
           )}
