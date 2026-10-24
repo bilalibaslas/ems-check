@@ -362,11 +362,13 @@ export function shiftEndDate(date, shift) {
 export const shiftEnded = (date, shift, now = new Date()) => now >= shiftEndDate(date, shift);
 // พขร. ประเมินต้นเวรตอนเวรเช้า และเวรบ่าย (บ่าย/ดึกเป็นคนเดียวกัน) จึงไม่นับเวรดึก
 export const ASSESS_SHIFTS = ["เช้า", "บ่าย"];
-export function noShows(rosterMap, list, th, now = new Date()) {
+// วันเริ่มใช้ระบบจริง: ก่อนวันนี้ไม่นับ "ไม่มาประเมิน" (แก้ได้ในตั้งค่า)
+export const GO_LIVE_DEF = "2026-11-01";
+export function noShows(rosterMap, list, th, now = new Date(), goLive = GO_LIVE_DEF) {
   const done = new Set(list.filter((d) => startsOf(d).some((s) => evalStart(s, th, d.shift).level !== "none")).map((d) => `${d.date}_${d.shift}`));
   return Object.entries(rosterMap || {})
     .map(([k, r]) => ({ key: k, date: k.slice(0, 10), shift: k.slice(11), driver: (r && r.driv) || "" }))
-    .filter((x) => x.driver && ASSESS_SHIFTS.includes(x.shift) && /^\d{4}-\d{2}-\d{2}$/.test(x.date))
+    .filter((x) => x.driver && ASSESS_SHIFTS.includes(x.shift) && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && x.date >= goLive)
     .filter((x) => shiftEnded(x.date, x.shift, now) && !done.has(x.key))
     .sort((a, b) => (a.key < b.key ? -1 : 1));
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ref, onValue, update, push, set, query, orderByKey, startAt, endAt } from "firebase/database";
+import { ref, onValue, update, push, set, get, query, orderByKey, startAt, endAt } from "firebase/database";
 import { db } from "./firebase";
 import * as L from "./logic";
 
@@ -237,6 +237,8 @@ export default function App() {
   const startDoc = useValue(`driverCheck/${startKey}`, {});
   const startRoster = useValue(`roster/${startKey}`, {});
   const thRaw = useValue("driverCheckConfig/thresholds", {});
+  const goLiveRaw = useValue("driverCheckConfig/goLive", null);
+  const goLive = typeof goLiveRaw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(goLiveRaw) ? goLiveRaw : L.GO_LIVE_DEF;
   const th = useMemo(() => ({ ...TH_DEF, ...(thRaw || {}) }), [thRaw]);
   const staffRaw = useValue("staff", {});
   const staff = useMemo(() => {
@@ -346,10 +348,10 @@ export default function App() {
 
       <main className="main">
         {tab !== "summary" && loading && <div className="empty">กำลังโหลด…</div>}
-        {tab === "start" && !loading && <StartTab key={startKey} {...common} shift={startShift} save={saveStartDoc} start={start} saveStart={saveStart} />}
+        {tab === "start" && !loading && <StartTab key={startKey} {...common} goLive={goLive} shift={startShift} save={saveStartDoc} start={start} saveStart={saveStart} />}
         {tab === "before" && !loading && <BeforeTab {...common} dbKey={key} />}
         {tab === "after" && !loading && <AfterTab {...common} />}
-        {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} />}
+        {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} goLive={goLive} />}
       </main>
 
       {leaveWarn && (
@@ -362,7 +364,7 @@ export default function App() {
 }
 
 /* ── ต้นเวร ── */
-function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save }) {
+function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save, goLive }) {
   const res = L.evalStart(start, th, shift);
   const fat = res.fat;
   const f = L.vitalFlags(start, th);
@@ -411,7 +413,10 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
 
   return (
     <>
-      {res.level === "none" && L.ASSESS_SHIFTS.includes(shift) && L.shiftEnded(date, shift) && (
+      {date < goLive && (
+        <div className="verdict v-none"><span>ยังไม่ถึงวันเริ่มใช้ระบบ ({L.thaiDate(goLive)}) · ข้อมูลช่วงนี้เป็นการทดลองใช้ ล้างได้ในหน้าสรุป › ตั้งค่า</span></div>
+      )}
+      {res.level === "none" && date >= goLive && L.ASSESS_SHIFTS.includes(shift) && L.shiftEnded(date, shift) && (
         <div className="verdict v-er" role="alert">
           <strong>ไม่มาประเมินต้นเวร</strong>
           <span>เวร{L.shiftLabel(shift)} วันที่ {L.thaiDate(date)} จบแล้ว · {names.rosterDriver || "พขร. (ยังไม่ลงชื่อใน ems-check)"} ไม่ได้ตรวจความพร้อมก่อนปฏิบัติงาน</span>
@@ -1040,7 +1045,7 @@ function SummaryTab(props) {
   return <SummaryBody {...props} lock={lock} />;
 }
 
-function SummaryBody({ th, toast, date, reasons, lock }) {
+function SummaryBody({ th, toast, date, reasons, lock, goLive }) {
   const [ym, setYm] = useState(date.slice(0, 7));
   const [data, setData] = useState(null);
   const [rosterMonth, setRosterMonth] = useState(null);
@@ -1061,7 +1066,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
   }, [ym]);
 
   const st = useMemo(() => (data ? L.summarize(data, th) : null), [data, th]);
-  const missed = useMemo(() => (data && rosterMonth ? L.noShows(rosterMonth, data, th) : []), [data, rosterMonth, th]);
+  const missed = useMemo(() => (data && rosterMonth ? L.noShows(rosterMonth, data, th, new Date(), goLive) : []), [data, rosterMonth, th, goLive]);
   const [y, m] = ym.split("-").map(Number);
 
   function downloadCSV() {
@@ -1183,7 +1188,7 @@ function SummaryBody({ th, toast, date, reasons, lock }) {
         </>
       )}
 
-      <Settings th={th} toast={toast} reasons={reasons} />
+      <Settings th={th} toast={toast} reasons={reasons} goLive={goLive} />
       <button type="button" className="btn soft" onClick={lock}>ล็อกหน้าสรุป</button>
     </>
   );
@@ -1222,7 +1227,25 @@ function PinGate({ onUnlock, toast }) {
   );
 }
 
-function Settings({ th, toast, reasons }) {
+function Settings({ th, toast, reasons, goLive }) {
+  const [glDraft, setGlDraft] = useState(goLive);
+  const [clean, setClean] = useState(null); // null | {keys:[...]} | "busy"
+  async function findTestData() {
+    setClean("busy");
+    try {
+      const snap = await get(query(ref(db, "driverCheck"), orderByKey(), endAt(goLive)));
+      const keys = Object.keys(snap.val() || {}).filter((k) => k.slice(0, 10) < goLive);
+      setClean({ keys });
+    } catch { setClean(null); toast("อ่านข้อมูลไม่สำเร็จ ลองใหม่"); }
+  }
+  async function wipe() {
+    if (!clean || !clean.keys) return;
+    const p = Object.fromEntries(clean.keys.map((k) => [k, null]));
+    setClean("busy");
+    try { await update(ref(db, "driverCheck"), p); toast(`ล้างข้อมูลทดลองแล้ว ${Object.keys(p).length} เวร`); }
+    catch { toast("ล้างไม่สำเร็จ ลองใหม่"); }
+    setClean(null);
+  }
   const [p1, setP1] = useState("");
   const [p2, setP2] = useState("");
   const [rText, setRText] = useState(reasons.filter((x) => x !== "อื่นๆ").join("\n"));
@@ -1240,7 +1263,7 @@ function Settings({ th, toast, reasons }) {
   }
   return (
     <details className="card">
-      <summary>ตั้งค่า (PIN · เหตุผล AT · เกณฑ์)</summary>
+      <summary>ตั้งค่า (PIN · เหตุผล AT · วันเริ่มใช้ · เกณฑ์)</summary>
       <div className="stack">
 
       <h3 className="h" style={{ fontSize: 15 }}>เปลี่ยน PIN ของหน้าสรุป</h3>
@@ -1260,6 +1283,33 @@ function Settings({ th, toast, reasons }) {
         <textarea className="inp" rows={8} value={rText} onChange={(e) => setRText(e.target.value)} style={{ fontSize: 15, resize: "vertical" }} />
       </label>
       <button type="button" className="btn pri" onClick={saveReasons}>บันทึกรายการเหตุผล</button>
+
+      <h3 className="h" style={{ fontSize: 15, marginTop: 8 }}>วันเริ่มใช้ระบบ</h3>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+        <label className="fld" style={{ flex: "1 1 auto" }}>ก่อนวันนี้ไม่นับ “ไม่มาประเมิน”
+          <input className="inp" type="date" value={glDraft} onChange={(e) => setGlDraft(e.target.value)} />
+        </label>
+        <button type="button" className="btn pri" disabled={!glDraft || glDraft === goLive}
+          onClick={() => set(ref(db, "driverCheckConfig/goLive"), glDraft).then(() => toast("บันทึกวันเริ่มใช้แล้ว"))}>บันทึก</button>
+      </div>
+      <div className="fld" style={{ color: "var(--ink)" }}>
+        <b style={{ fontSize: 14 }}>ล้างข้อมูลทดลองก่อน {L.thaiDate(goLive)}</b>
+        <span className="sub">ลบผลต้นเวร การเป่า และ AT ที่บันทึกก่อนวันเริ่มใช้ (เฉพาะของ Driver Check ไม่แตะข้อมูลเช็ครถ) ลบแล้วกู้คืนไม่ได้</span>
+        {clean === null && <button type="button" className="btn soft" onClick={findTestData}>ตรวจหาข้อมูลทดลอง</button>}
+        {clean === "busy" && <span className="sub">กำลังดำเนินการ…</span>}
+        {clean && clean.keys && (clean.keys.length === 0 ? (
+          <div className="row"><span className="sub">ไม่มีข้อมูลก่อนวันเริ่มใช้</span><button type="button" className="link" onClick={() => setClean(null)}>ปิด</button></div>
+        ) : (
+          <div className="verdict v-er" style={{ padding: "10px 14px" }}>
+            <strong style={{ fontSize: 15 }}>พบข้อมูลทดลอง {clean.keys.length} เวร จะลบทั้งหมดใช่ไหม?</strong>
+            <span style={{ fontSize: 13 }}>{clean.keys.slice(0, 6).map((k) => `${L.thaiDate(k.slice(0, 10))} ${k.slice(11)}`).join(" · ")}{clean.keys.length > 6 ? " …" : ""}</span>
+            <div className="row" style={{ justifyContent: "flex-start", gap: 10 }}>
+              <button type="button" className="btn soft sm" onClick={() => setClean(null)}>ยกเลิก</button>
+              <button type="button" className="btn danger sm" onClick={wipe}>ลบข้อมูลทดลอง</button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <h3 className="h" style={{ fontSize: 15, marginTop: 8 }}>เกณฑ์</h3>
       <span className="sub">ค่าตั้งต้นเป็นค่าตัวอย่าง ปรับให้ตรงแนวปฏิบัติของหน่วยงาน การแก้มีผลกับทุกเครื่อง</span>
