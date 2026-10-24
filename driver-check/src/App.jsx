@@ -355,8 +355,8 @@ export default function App() {
       </main>
 
       <footer className="credit">
-        พัฒนาโดย <b>Salsabila</b> · Paramedic งาน Pre-hospital<br />
-        โรงพยาบาลมหาราชนครศรีธรรมราช
+        พัฒนาโดย <b>Salsabila S.</b> Paramedic<br />
+        อัปเดตล่าสุด 25 ต.ค. 2569
       </footer>
 
       {leaveWarn && (
