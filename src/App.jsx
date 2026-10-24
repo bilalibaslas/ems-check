@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import buildInfo from "./buildInfo.json";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, remove, onValue, get, query, orderByKey, startAt, endAt, limitToLast } from "firebase/database";
 
@@ -2634,8 +2635,8 @@ function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,
 }
 
 /* ── Root App ── */
-// เครดิตท้ายแอป — เปลี่ยนวันที่นี้ทุกครั้งที่อัปเดตแอป
-const APP_UPDATED="25 ต.ค. 2569";
+// เครดิตท้ายแอป — วันที่อัปเดตมาจากวันที่ build/deploy จริง (scripts/build-info.js รันก่อน build)
+const APP_UPDATED=(()=>{const [y,m,d]=String(buildInfo.date||"").split("-").map(Number);return y&&m&&d?`${d} ${TH_MONTH_ABBR[m-1]} ${y+543}`:"";})();
 
 export default function App(){
   const {year:ty,month:tm,day:td}=todayParts();
@@ -2757,7 +2758,7 @@ export default function App(){
         <footer style={{textAlign:"center",fontSize:12,lineHeight:1.7,color:"#7f93ab",padding:"24px 8px 12px",borderTop:"1px solid #e3edf8",marginTop:24}}>
           <div style={{fontWeight:700,color:"#5d7290"}}>EMS Check · งาน Pre-hospital</div>
           <div>กลุ่มงานเวชศาสตร์ฉุกเฉิน รพ.มหาราชนครศรีธรรมราช</div>
-          <div>พัฒนาโดย Salsabila S.</div>
+          <div>พัฒนาโดย Salsabila S. Paramedic</div>
           <div>อัปเดตล่าสุด {APP_UPDATED}</div>
         </footer>
       </div>
