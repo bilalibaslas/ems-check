@@ -2756,8 +2756,6 @@ export default function App(){
         {view==="dashboard"&&<DashboardPage selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="settings" &&<SettingsPage  myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
         <footer style={{textAlign:"center",fontSize:12,lineHeight:1.7,color:"#7f93ab",padding:"24px 8px 12px",borderTop:"1px solid #e3edf8",marginTop:24}}>
-          <div style={{fontWeight:700,color:"#5d7290"}}>EMS Check · งาน Pre-hospital</div>
-          <div>กลุ่มงานเวชศาสตร์ฉุกเฉิน รพ.มหาราชนครศรีธรรมราช</div>
           <div>พัฒนาโดย Salsabila S. Paramedic</div>
           <div>อัปเดตล่าสุด {APP_UPDATED}</div>
         </footer>
