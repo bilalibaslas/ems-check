@@ -354,6 +354,11 @@ export default function App() {
         {tab === "summary" && <SummaryTab th={th} toast={toast} date={date} reasons={reasons} goLive={goLive} />}
       </main>
 
+      <footer className="credit">
+        พัฒนาโดย <b>Salsabila</b> · Paramedic งาน Pre-hospital<br />
+        โรงพยาบาลมหาราชนครศรีธรรมราช
+      </footer>
+
       {leaveWarn && (
         <MissingDialog items={startRes.items} onBack={() => setLeaveWarn(null)}
           skipLabel="ไปต่อก่อน" onSkip={() => { setTab(leaveWarn); setLeaveWarn(null); }} />
