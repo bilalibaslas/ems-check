@@ -119,11 +119,15 @@ function roleTotal(roleId){
 function entryDone(e){return e?Object.values(e.checked||{}).filter(Boolean).length:0;}
 // ใช้จำนวนรายการ ณ วันที่เช็ค (ถ้ามีบันทึกไว้) เพื่อไม่ให้เวรเก่าเพี้ยนเมื่อแก้รายการอุปกรณ์
 function recTotal(e,roleId){return (e&&typeof e.total==="number")?e.total:roleTotal(roleId);}
-function entryOK(e,roleId){const t=recTotal(e,roleId);return !!(e&&e.name&&t>0&&entryDone(e)===t);}
+// เกณฑ์ผ่าน: มาเช็คแล้ว ขาด/ติ๊กตกหล่นไม่เกิน 2 รายการ ถือว่าเช็คแล้ว (เช่น พขร. 17–19/19, A-EMT 33–35/35)
+const PASS_MISSING=2;
+function passCount(done,total){return total>0&&done>=total-PASS_MISSING;}
+function entryOK(e,roleId){const t=recTotal(e,roleId);return !!(e&&e.name&&passCount(entryDone(e),t));}
 function checkMark(e,roleId){
   if(!e) return "ยังไม่เช็ค ❌";
   const t=recTotal(e,roleId),d=entryDone(e);
-  return d===t&&t>0?"เช็คแล้ว ✅":`เช็คไม่ครบ ${d}/${t} ⚠️`;
+  if(d>=t&&t>0) return "เช็คแล้ว ✅";
+  return passCount(d,t)?`เช็คแล้ว ✅ (${d}/${t})`:`เช็คไม่ครบ ${d}/${t} ⚠️`;
 }
 // ช่องรายชื่อ: เวรเช้า/บ่าย = Para หรือ ไม้ 9 + ไม้ A, เวรดึก = ไม้ A1 + ไม้ A2
 const ROSTER_ALL=[
@@ -326,7 +330,7 @@ function exportToExcel(allData,equipment,selYear,selMonth){
         const e=allData[k];
         const total=recTotal(e,role.id);
         const done=e?Object.values(e.checked||{}).filter(Boolean).length:0;
-        const status=!e?"ไม่มีข้อมูล":done===total?"ครบ":"ไม่ครบ";
+        const status=!e?"ไม่มีข้อมูล":done>=total?"ครบ":passCount(done,total)?`ผ่าน (ขาด ${total-done})`:"ไม่ครบ";
         rows.push([`${d} ${MONTH_NAMES[selMonth]} ${selYear+543}`,shift,role.short,e?.name||"-",done,total,status,e?.note||"-"]);
       }
     }
@@ -1374,14 +1378,14 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
         return{role:r,entry:e,done:getDone(e),total:recTotal(e,r.id)};
       });
       const ros=roster[rosterKey(selYear,selMonth,d,shift)];
-      const allOK=roleResults.every(r=>r.entry&&r.entry.name&&r.done===r.total&&r.total>0);
+      const allOK=roleResults.every(r=>r.entry&&r.entry.name&&passCount(r.done,r.total));
       if(!allOK) rows.push({day:d,shift,roleResults,ros});
     }
   }
 
   const copyText="สรุปเวรที่ไม่ได้เช็คอุปกรณ์ EMS\nเดือน"+MONTH_NAMES[selMonth]+" "+(selYear+543)+"\n"+"─".repeat(36)+"\n"+
     rows.map(({day,shift,roleResults,ros})=>{
-      const missing=roleResults.filter(r=>!r.entry||!r.entry.name||r.done<r.total);
+      const missing=roleResults.filter(r=>!r.entry||!r.entry.name||!passCount(r.done,r.total));
       return "• "+day+" "+MONTH_NAMES[selMonth]+" เวร"+shift+"\n"+missing.map(r=>{
         const who=r.entry?.name?r.entry.name:("ไม่ได้เช็ค — ผู้อยู่เวร: "+(dutyName(ros,r.role.id,shift)||"ไม่ได้ลงชื่อเวร"));
         return "  - "+r.role.short+": "+who+" ["+r.done+"/"+r.total+"]";
@@ -1424,7 +1428,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
                   </div>
                   <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
                     {roleResults.map(r=>{
-                      const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
+                      const ok=r.entry&&r.entry.name&&passCount(r.done,r.total);
                       return <span key={r.role.id} style={{fontSize:16}}>{ok?"✅":"❌"}</span>;
                     })}
                     <span style={{fontSize:12,color:"#7f93ab",marginLeft:4}}>{isExp?"▲":"▼"}</span>
@@ -1434,7 +1438,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
                 {isExp&&(
                   <div style={{padding:"0 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
                     {roleResults.map(r=>{
-                      const ok=r.entry&&r.entry.name&&r.done===r.total&&r.total>0;
+                      const ok=r.entry&&r.entry.name&&passCount(r.done,r.total);
                       return(
                         <div key={r.role.id} style={{display:"flex",flexDirection:"column",gap:4,padding:"10px 12px",borderRadius:8,background:ok?"rgba(18,160,120,0.06)":"rgba(226,92,134,0.06)",border:"1px solid "+(ok?"#128a6a33":"#e25c8633")}}>
                           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1444,7 +1448,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
                               <div style={{fontSize:12,color:"#5d7290"}}>{r.entry?.name||"ยังไม่ได้บันทึก"}</div>
                               {!r.entry?.name&&<div style={{fontSize:12,color:"#c26a1e",marginTop:2}}>👤 ผู้อยู่เวร: {dutyName(ros,r.role.id,shift)||"ไม่ได้ลงชื่อเวร"}</div>}
                             </div>
-                            <div style={{fontSize:12,color:ok?"#128a6a":"#d6456f",fontWeight:700}}>{ok?"✓ ครบ":r.done+"/"+r.total}</div>
+                            <div style={{fontSize:12,color:ok?"#128a6a":"#d6456f",fontWeight:700}}>{ok?(r.done>=r.total?"✓ ครบ":`✓ ผ่าน ${r.done}/${r.total}`):r.done+"/"+r.total}</div>
                           </div>
                           {r.entry?.note&&(
                             <div style={{fontSize:12,color:"#5d7290",padding:"6px 10px",background:"#f6faff",borderRadius:6}}>
@@ -1637,7 +1641,7 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
 
   function exportCsv(){
     const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-    const st=(r,id)=>entryOK(r.checks[id],id)?"ครบ":r.checks[id]?`${entryDone(r.checks[id])}/${roleTotal(id)}`:"ไม่เช็ค";
+    const st=(r,id)=>{const e=r.checks[id];if(!e)return "ไม่เช็ค";const d=entryDone(e),t=recTotal(e,id);return entryOK(e,id)?(d>=t?"ครบ":`ผ่าน ${d}/${t}`):`${d}/${t}`;};
     const head=["วันที่","เวร",...ROSTER_ALL.map(f=>f.label),"Para/ENP/RN เช็ค","ผู้เช็ค Para/ENP/RN","A-EMT เช็ค","ผู้เช็ค A-EMT","พขร. เช็ค","ผู้เช็ค พขร."];
     const lines=[head,...[...rows].reverse().map(r=>{const o=r.ros||{};return[
       `${r.d} ${MONTH_NAMES[selMonth]} ${selYear+543}`,r.shift,...ROSTER_ALL.map(f=>o[f.id]),
@@ -1750,7 +1754,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
       for(const shift of SHIFTS){
         const k=recKey(selYear,selMonth,d,shift,r.id); const e=allData[k];
         const cnt=getDone(e); const tot=recTotal(e,r.id);
-        if(!e||!e.name){missing++;}else if(cnt===tot){done++;}else{incomplete++;}
+        if(!e||!e.name){missing++;}else if(passCount(cnt,tot)){done++;}else{incomplete++;}
       }
     }
     totalDone+=done;totalMissing+=missing;totalIncomplete+=incomplete;
@@ -1765,7 +1769,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
       const allOK=ROLES.every(r=>{
         const k=recKey(selYear,selMonth,d,shift,r.id); const e=allData[k];
         const cnt=getDone(e); const tot=recTotal(e,r.id);
-        return e&&e.name&&cnt===tot&&tot>0;
+        return e&&e.name&&passCount(cnt,tot);
       });
       if(allOK) ok++;
     });
