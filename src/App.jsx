@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, remove, onValue } from "firebase/database";
+import { getDatabase, ref, set, remove, onValue, get, query, orderByKey, startAt, endAt, limitToLast } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCW_xpZq3nVeL86NUX5S8W1hbMSzdS4kpk",
@@ -13,6 +13,8 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
+// โหลดเฉพาะเดือนที่ดู (คีย์ขึ้นต้นด้วย YYYY-MM) แทนการโหลดทั้งหมด ประหยัดโควตาดาวน์โหลด
+function monthRef(path,pre){return query(ref(db,path),orderByKey(),startAt(pre),endAt(pre+"\uf8ff"));}
 
 const ROLES = [
   { id:"para", label:"Paramedic / ENP / RN", short:"Para/ENP/RN", icon:"🩺", color:"#e25c86" },
@@ -531,7 +533,7 @@ function RosterCard({selYear,selMonth,selDay,selShift}){
   const [err,setErr]=useState(""); const [copied,setCopied]=useState(false);
 
   // ประวัติรายชื่อเวร (ใช้เติมทะเบียนรถล่าสุดให้)
-  useEffect(()=>{const u=onValue(ref(db,"roster"),s=>setAll(s.val()||{}));return()=>u();},[]);
+  useEffect(()=>{const u=onValue(query(ref(db,"roster"),orderByKey(),limitToLast(30)),s=>setAll(s.val()||{}));return()=>u();},[]);
 
   // ข้อมูลเวรที่เลือก
   useEffect(()=>{
@@ -1340,7 +1342,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
   const [roster,setRoster]=useState({});
   useEffect(()=>{
     const pre=`${selYear}-${String(selMonth+1).padStart(2,"0")}`;
-    const u=onValue(ref(db,"roster"),snap=>{
+    const u=onValue(monthRef("roster",pre),snap=>{
       const raw=snap.val()||{};
       setRoster(Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(pre))));
     });
@@ -1348,7 +1350,7 @@ function SummaryPage({selYear,selMonth,equipment,onLock}){
   },[selYear,selMonth]);
   useEffect(()=>{
     setLoading(true);
-    const u=onValue(ref(db,"records"),snap=>{
+    const u=onValue(monthRef("records",`${selYear}-${String(selMonth+1).padStart(2,"0")}`),snap=>{
       const raw=snap.val()||{};
       const f=Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(`${selYear}-${String(selMonth+1).padStart(2,"0")}`)));
       setAllData(f);setLoading(false);
@@ -1600,8 +1602,8 @@ function RosterHistoryPage({selYear,selMonth,onLock}){
   useEffect(()=>{
     setLoading(true);
     const pick=raw=>Object.fromEntries(Object.entries(raw||{}).filter(([k])=>k.startsWith(pre)));
-    const u1=onValue(ref(db,"roster"),s=>setRoster(pick(s.val())));
-    const u2=onValue(ref(db,"records"),s=>{setAllData(pick(s.val()));setLoading(false);});
+    const u1=onValue(monthRef("roster",pre),s=>setRoster(pick(s.val())));
+    const u2=onValue(monthRef("records",pre),s=>{setAllData(pick(s.val()));setLoading(false);});
     return()=>{u1();u2();};
   },[pre]);
 
@@ -1721,7 +1723,7 @@ function DashboardPage({selYear,selMonth,equipment,onLock}){
 
   useEffect(()=>{
     setLoading(true);
-    const u=onValue(ref(db,"records"),snap=>{
+    const u=onValue(monthRef("records",`${selYear}-${String(selMonth+1).padStart(2,"0")}`),snap=>{
       const raw=snap.val()||{};
       const f=Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(`${selYear}-${String(selMonth+1).padStart(2,"0")}`)));
       setAllData(f);setLoading(false);
@@ -2371,6 +2373,110 @@ function StaffManager(){
   );
 }
 
+/* ── สำรองข้อมูล (Backup) — ดาวน์โหลดทุกส่วนเป็นไฟล์ JSON ไฟล์เดียว ── */
+// ต้องตรงกับ database.rules.json (root อ่านไม่ได้ จึงอ่านทีละส่วน) — เพิ่มส่วนใหม่ใน DB ต้องเพิ่มที่นี่ด้วย
+const BACKUP_PATHS=["records","roster","staff","checklists","expiry","expiryItems","expiryLog","pending","equipment","config","driverCheck","driverCheckConfig"];
+function downloadFile(name,text,type){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([text],{type}));
+  a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+function BackupCard(){
+  const [busy,setBusy]=useState(false); const [msg,setMsg]=useState("");
+  const [last,setLast]=useState(null);
+  useEffect(()=>{const u=onValue(ref(db,"config/lastBackup"),s=>setLast(s.val()));return()=>u();},[]);
+  const days=last?.at?Math.floor((Date.now()-new Date(last.at).getTime())/86400000):null;
+  const due=days===null||days>=30;
+  async function backup(){
+    setBusy(true);setMsg("");
+    try{
+      const out={}; const failed=[];
+      for(const p of BACKUP_PATHS){
+        try{const snap=await get(ref(db,p)); if(snap.exists()) out[p]=snap.val();}
+        catch(e){failed.push(p);}
+      }
+      const now=new Date(); const t=getThaiNow();
+      const stamp=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+      const text=JSON.stringify(out,null,1);
+      downloadFile(`ems-check-backup-${stamp}.json`,text,"application/json");
+      await set(ref(db,"config/lastBackup"),{at:now.toISOString(),bytes:text.length,paths:Object.keys(out).length}).catch(()=>{});
+      const kb=Math.round(text.length/1024);
+      setMsg(failed.length?`⚠️ ดาวน์โหลดแล้ว (${kb} KB) แต่อ่านไม่ได้: ${failed.join(", ")}`:`✅ ดาวน์โหลดแล้ว ${kb} KB · เก็บไฟล์ไว้ใน Google Drive ของหน่วยงาน`);
+    }catch(e){setMsg("⚠️ สำรองไม่สำเร็จ: "+(e.message||e));}
+    setBusy(false);
+  }
+  return(
+    <Card style={{border:`1.5px solid ${due?"#e8893a88":"#9fd3e6"}`}}>
+      <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a",marginBottom:4}}>💾 สำรองข้อมูล (Backup)</div>
+      <div style={{fontSize:12,color:"#5d7290",marginBottom:8,lineHeight:1.6}}>ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์เดียว (.json) แนะนำเดือนละครั้ง · ห้ามเก็บไฟล์ใน GitHub</div>
+      <div style={{fontSize:13,fontWeight:700,color:due?"#b4530f":"#128a6a",marginBottom:10}}>
+        {last?.at?`สำรองล่าสุด ${new Date(last.at).toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"2-digit"})} (${days} วันก่อน)`:"ยังไม่เคยสำรองข้อมูล"}{due?" · ถึงเวลาสำรองแล้ว":""}
+      </div>
+      <button type="button" disabled={busy} onClick={backup} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,background:busy?"#b8cde8":"#4a86e8",color:"#fff"}}>
+        {busy?"⏳ กำลังรวบรวมข้อมูล...":"⬇️ ดาวน์โหลด Backup ทั้งหมด"}
+      </button>
+      {msg&&<div style={{fontSize:13,marginTop:8,color:msg.startsWith("⚠️")?"#d6456f":"#128a6a"}}>{msg}</div>}
+    </Card>
+  );
+}
+
+/* ── แบบฟอร์มเช็คกระดาษ (สำรองตอนระบบใช้ไม่ได้) — สร้างจากรายการอุปกรณ์ปัจจุบัน ── */
+function PaperFormCard(){
+  const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  function openForm(){
+    const roles=[["Para / ENP / RN",PARA_GROUPS],["A-EMT",AEMT_GROUPS],["พนักงานขับรถ",DRIV_GROUPS]];
+    const page=(title,groups)=>`<section><h1>แบบฟอร์มเช็คอุปกรณ์ EMS (สำรอง) — ${esc(title)}</h1>
+      <div class="meta">วันที่ ............................ &nbsp; เวร &nbsp;☐ เช้า &nbsp;☐ บ่าย &nbsp;☐ ดึก &nbsp; ทะเบียนรถ ....................<br>ผู้ตรวจเช็ค .................................................. &nbsp; เวลา ..............</div>
+      ${groups.map(g=>`<h2>${esc(g.label)}</h2><table><tr><th class="n">#</th><th>รายการ</th><th class="c">ครบ</th><th class="c">ขาด/ค้าง</th><th class="r">หมายเหตุ</th></tr>${g.items.map((it,i)=>`<tr><td class="n">${i+1}</td><td>${esc(it.label)}</td><td class="c">☐</td><td class="c">☐</td><td></td></tr>`).join("")}</table>`).join("")}
+      <div class="meta">หมายเหตุ / ของค้างส่งต่อเวร ..........................................................................................................<br>.........................................................................................................................................................</div>
+      <div class="foot">บันทึกย้อนหลังในแอป ems-check-mnst.vercel.app เมื่อระบบกลับมาใช้ได้ (เลือกวันที่และเวรให้ตรง)</div></section>`;
+    const html=`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>แบบฟอร์มเช็คอุปกรณ์ EMS (สำรอง)</title>
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+      <style>@page{size:A4;margin:12mm}body{font-family:Sarabun,sans-serif;font-size:12pt;color:#000;margin:0}
+      section{page-break-after:always}h1{font-size:15pt;margin:0 0 6px}h2{font-size:12.5pt;margin:10px 0 4px}
+      table{width:100%;border-collapse:collapse}td,th{border:1px solid #444;padding:3px 6px;vertical-align:top}
+      th{background:#eee}.n{width:24px;text-align:center}.c{width:52px;text-align:center}.r{width:28%}
+      .meta{margin:6px 0;line-height:2}.foot{margin-top:8px;font-size:10pt;color:#333}
+      .bar{padding:10px;background:#eef5ff;font-family:sans-serif}@media print{.bar{display:none}}</style></head>
+      <body><div class="bar"><button onclick="window.print()" style="font-size:16px;padding:8px 16px">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+      ${roles.map(([t,g])=>page(t,g)).join("")}</body></html>`;
+    const w=window.open("","_blank");
+    if(!w){alert("เบราว์เซอร์บล็อกหน้าต่างใหม่ กรุณาอนุญาต pop-up แล้วลองอีกครั้ง");return;}
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+  return(
+    <Card style={{border:"1.5px solid #9fd3e6"}}>
+      <div style={{fontSize:14,fontWeight:800,color:"#1f7f9a",marginBottom:4}}>🖨️ แบบฟอร์มเช็คกระดาษ (สำรอง)</div>
+      <div style={{fontSize:12,color:"#5d7290",marginBottom:10,lineHeight:1.6}}>สร้างจากรายการอุปกรณ์ปัจจุบันของทั้ง 3 ตำแหน่ง ใช้ตอนเน็ตหรือระบบใช้ไม่ได้ · พิมพ์เก็บไว้ในรถ แล้วพิมพ์ใหม่เมื่อแก้รายการ</div>
+      <button type="button" onClick={openForm} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:800,background:"#2a9fb8",color:"#fff"}}>เปิดแบบฟอร์มสำหรับพิมพ์</button>
+    </Card>
+  );
+}
+
+/* ── ป้ายออฟไลน์: เน็ตหลุด ห้ามปิด/รีเฟรชจนกว่าจะ Sync ── */
+function OfflineBanner(){
+  const [online,setOnline]=useState(true); const [ready,setReady]=useState(false);
+  useEffect(()=>{
+    const t=setTimeout(()=>setReady(true),5000); // ช่วงแรกที่ยังเชื่อมต่อไม่เสร็จ ไม่ต้องเตือน
+    const u=onValue(ref(db,".info/connected"),s=>{const c=s.val()===true;setOnline(c);if(c)setReady(true);});
+    return()=>{clearTimeout(t);u();};
+  },[]);
+  const offline=ready&&!online;
+  useEffect(()=>{
+    if(!offline) return;
+    const h=e=>{e.preventDefault();e.returnValue="";};
+    window.addEventListener("beforeunload",h);
+    return()=>window.removeEventListener("beforeunload",h);
+  },[offline]);
+  if(!offline) return null;
+  return(
+    <div role="status" style={{position:"sticky",top:0,zIndex:900,background:"#b4530f",color:"#fff",padding:"10px 16px",fontSize:14,fontWeight:700,lineHeight:1.5,textAlign:"center"}}>
+      📡 ออฟไลน์อยู่ — ข้อมูลที่บันทึกจะส่งขึ้นเมื่อเน็ตกลับมา <u>ห้ามปิดหรือรีเฟรชแอป</u> จนกว่าป้ายนี้จะหายไป
+    </div>
+  );
+}
+
 function SettingsPage({myRole,equipment,onSaveEquip}){
   const role=ROLE_MAP[myRole];
   const [draft,setDraft]=useState([...(equipment[myRole]||[])]);
@@ -2434,6 +2540,8 @@ function SettingsPage({myRole,equipment,onSaveEquip}){
       )}
 
       <StaffManager/>
+      <BackupCard/>
+      <PaperFormCard/>
 
       <Card style={{border:"1.5px solid rgba(232,137,58,0.3)"}}>
         <div style={{fontSize:14,fontWeight:800,color:"#c26a1e",marginBottom:14}}>🔑 เปลี่ยน PIN</div>
@@ -2571,6 +2679,7 @@ export default function App(){
 
   return(
     <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f3f8ff,#ecf7f6)",fontFamily:"'Sarabun','Noto Sans Thai',sans-serif",color:"#1f3047"}}>
+      <OfflineBanner/>
       <div style={{background:"linear-gradient(100deg,#d4ecfb,#dfe3fc)",color:"#1f3047",padding:"14px 18px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 14px rgba(74,134,232,0.15)",flexWrap:"wrap"}}>
         <div style={{fontSize:26}}>🚑</div>
         <div>
@@ -2621,7 +2730,7 @@ export default function App(){
                   {MONTH_NAMES.map((m,i)=><option key={i} value={i}>{m}</option>)}
                 </select>
                 <select value={selYear} onChange={e=>setSelYear(+e.target.value)} style={BASE_SEL}>
-                  {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y+543}</option>)}
+                  {Array.from({length:getThaiNow().getFullYear()+2-2024},(_,i)=>2024+i).map(y=><option key={y} value={y}>{y+543}</option>)}
                 </select>
               </>
             )}
