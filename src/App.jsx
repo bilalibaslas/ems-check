@@ -2634,6 +2634,9 @@ function SuccessScreen({myName,role,selDay,selMonth,selYear,selShift,totalItems,
 }
 
 /* ── Root App ── */
+// เครดิตท้ายแอป — เปลี่ยนวันที่นี้ทุกครั้งที่อัปเดตแอป
+const APP_UPDATED="25 ต.ค. 2569";
+
 export default function App(){
   const {year:ty,month:tm,day:td}=todayParts();
   const {shift:autoShift,year:shiftYear,month:shiftMonth,day:shiftDay}=getShiftAndDate();
@@ -2751,6 +2754,12 @@ export default function App(){
         {view==="roster"   &&<RosterHistoryPage selYear={selYear} selMonth={selMonth} onLock={handleLock}/>}
         {view==="dashboard"&&<DashboardPage selYear={selYear} selMonth={selMonth} equipment={equipment} onLock={handleLock}/>}
         {view==="settings" &&<SettingsPage  myRole={myRole} equipment={equipment} onSaveEquip={setEquipment}/>}
+        <footer style={{textAlign:"center",fontSize:12,lineHeight:1.7,color:"#7f93ab",padding:"24px 8px 12px",borderTop:"1px solid #e3edf8",marginTop:24}}>
+          <div style={{fontWeight:700,color:"#5d7290"}}>EMS Check · งาน Pre-hospital</div>
+          <div>กลุ่มงานเวชศาสตร์ฉุกเฉิน รพ.มหาราชนครศรีธรรมราช</div>
+          <div>พัฒนาโดย Salsabila S.</div>
+          <div>อัปเดตล่าสุด {APP_UPDATED}</div>
+        </footer>
       </div>
     </div>
   );
