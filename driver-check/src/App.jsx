@@ -221,6 +221,9 @@ const ClockIcon = () => (
 );
 
 /* ── App ── */
+// ใส่ตอน build (vite.config.js) จึงเปลี่ยนเองทุกครั้งที่ deploy
+const BUILD_DATE = typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+
 export default function App() {
   const init = useMemo(() => L.currentShift(), []);
   const [date, setDate] = useState(init.date);
@@ -356,7 +359,7 @@ export default function App() {
 
       <footer className="credit">
         พัฒนาโดย <b>Salsabila S.</b> Paramedic<br />
-        อัปเดตล่าสุด 25 ต.ค. 2569
+        อัปเดตล่าสุด {L.thaiShortDate(BUILD_DATE)}
       </footer>
 
       {leaveWarn && (
