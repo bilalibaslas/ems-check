@@ -234,7 +234,7 @@ export default function App() {
   const key = `${date}_${shift}`;
   const doc = useValue(`driverCheck/${key}`, {});
   const roster = useValue(`roster/${key}`, {});
-  // ต้นเวร พขร. มี 2 เวร: เช้า กับ บ่าย/ดึก (16:15–08:15) ผลต้นเวรของบ่าย/ดึกเก็บที่เอกสารเวรบ่าย
+  // ต้นเวร พขร. มี 2 เวร: เช้า กับ บ่าย/ดึก (16:00–08:00) ผลต้นเวรของบ่าย/ดึกเก็บที่เอกสารเวรบ่าย
   const startShift = shift === "ดึก" ? "บ่าย" : shift;
   const startKey = `${date}_${startShift}`;
   const startDoc = useValue(`driverCheck/${startKey}`, {});
@@ -332,7 +332,7 @@ export default function App() {
             ))}
           </div>
         </div>
-        {shift === "ดึก" && <div className="sub">เวรดึก 00:15–08:14 นับเป็นของวันก่อนหน้า (เหมือน ems-check)</div>}
+        {shift === "ดึก" && <div className="sub">เวรดึก (ถึง 08:00) นับเป็นของวันก่อนหน้า (เหมือน ems-check)</div>}
         {conn === false && (
           <div className={"offline " + (pending ? "bad" : "")} role="alert">
             {pending
@@ -432,7 +432,7 @@ function StartTab({ date, shift, th, toast, names, staff, start, saveStart, save
       )}
       <div className="shifthead">
         <b>ต้นเวร พขร. · เวร{L.shiftLabel(shift)}</b>
-        <span>{shift === "เช้า" ? `${L.thaiDate(date)} · 08:15–16:15` : `เข้า 16:15 วันที่ ${L.thaiDate(date)} · ออก 08:15 วันถัดไป`}</span>
+        <span>{shift === "เช้า" ? `${L.thaiDate(date)} · 08:00–16:00` : `เข้า 16:00 วันที่ ${L.thaiDate(date)} · ออก 08:00 วันถัดไป`}</span>
       </div>
       <section className="card roster">
         <div className="row">

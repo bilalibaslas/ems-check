@@ -2,11 +2,11 @@
 
 export const MONTHS = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
 export const SHIFTS = ["เช้า", "บ่าย", "ดึก"];
-// เวลาจบเวรของ พขร. (นาทีของวัน): เช้า 08:15–16:15, บ่าย/ดึก 16:15–08:15 ของอีกวัน
-const SHIFT_END = { "เช้า": 16 * 60 + 15, "บ่าย": 8 * 60 + 15, "ดึก": 8 * 60 + 15 };
-// พขร. มี 2 เวร: เช้า และ บ่าย/ดึก (บ่ายกับดึกพ่วงกัน 16:15–08:15)
+// เวลาจบเวรของ พขร. (นาทีของวัน): เช้า 08:00–16:00, บ่าย/ดึก 16:00–08:00 ของอีกวัน
+const SHIFT_END = { "เช้า": 16 * 60, "บ่าย": 8 * 60, "ดึก": 8 * 60 };
+// พขร. มี 2 เวร: เช้า และ บ่าย/ดึก (บ่ายกับดึกพ่วงกัน 16:00–08:00)
 export const shiftLabel = (s) => (s === "เช้า" ? "เช้า" : "บ่าย/ดึก");
-export const SHIFT_END_TEXT = { "เช้า": "16:15", "บ่าย": "08:15 ของอีกวัน", "ดึก": "08:15" };
+export const SHIFT_END_TEXT = { "เช้า": "16:00", "บ่าย": "08:00 ของอีกวัน", "ดึก": "08:00" };
 
 // ประเมินการปฏิบัติงานตอนจบเวร (รายงานเฉพาะเมื่อมีเรื่องควรปรับปรุง)
 export const REVIEW_ITEMS = [
@@ -85,14 +85,14 @@ export const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Nu
 export const fmt = (v) => (v == null ? "-" : String(Math.round(v * 10) / 10));
 const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "").trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
-// เลือกเวรตามเวลาปัจจุบัน: เช้า 08:15–16:14, บ่าย 16:15–00:14, ดึก 00:15–08:14 (นับเป็นของวันก่อนหน้า เหมือน ems-check)
+// เลือกเวรตามเวลาของ พขร.: เช้า 08:00–15:59, บ่าย 16:00–00:14, ดึก 00:15–07:59 (บ่าย/ดึกนับเป็นของวันก่อนหน้า เหมือน ems-check)
 export function currentShift(now = new Date()) {
   const m = now.getHours() * 60 + now.getMinutes();
   const prev = new Date(now);
   prev.setDate(prev.getDate() - 1);
   if (m < 15) return { date: ds(prev), shift: "บ่าย" };
-  if (m < 8 * 60 + 15) return { date: ds(prev), shift: "ดึก" };
-  if (m < 16 * 60 + 15) return { date: ds(now), shift: "เช้า" };
+  if (m < 8 * 60) return { date: ds(prev), shift: "ดึก" };
+  if (m < 16 * 60) return { date: ds(now), shift: "เช้า" };
   return { date: ds(now), shift: "บ่าย" };
 }
 

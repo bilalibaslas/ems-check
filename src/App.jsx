@@ -105,7 +105,7 @@ function rosterKey(y,m,d,shift){return `${dateStr(y,m,d)}_${shift}`;}
 // พขร. เวรบ่ายและดึกบันทึกรวมเป็น "บ่าย/ดึก" ซึ่ง Firebase เก็บซ้อนเป็น records/{วันที่}_บ่าย/ดึก_driv
 function drivPath(y,m,d,shift){return shift==="เช้า"?`records/${recKey(y,m,d,"เช้า","driv")}`:`records/${dateStr(y,m,d)}_บ่าย/ดึก_driv`;}
 function getEntry(allData,y,m,d,shift,roleId){
-  // พขร. บ่าย/ดึก (16:15–08:15) เก็บที่ records/{วันที่}_บ่าย/ดึก_driv
+  // พขร. บ่าย/ดึก (16:00–08:00) เก็บที่ records/{วันที่}_บ่าย/ดึก_driv
   // เผื่อข้อมูลเก่าที่ถูกบันทึกเป็น _บ่าย_driv หรือ _ดึก_driv (ก่อนแก้ให้เลือกเวรบ่าย/ดึกอัตโนมัติ)
   if(roleId==="driv"&&shift!=="เช้า") return allData[`${dateStr(y,m,d)}_บ่าย`]?.["ดึก_driv"]
     || allData[recKey(y,m,d,"บ่าย","driv")] || allData[recKey(y,m,d,"ดึก","driv")];
@@ -197,6 +197,15 @@ function getShiftAndDate(){
     dateRef.setDate(dateRef.getDate()-1);
   }
   return{shift,year:dateRef.getFullYear(),month:dateRef.getMonth(),day:dateRef.getDate()};
+}
+// พขร. ตัดเวรต่างจากพยาบาล: เช้า 08:00–16:00, บ่าย/ดึก 16:00–08:00 ของวันถัดไป (00:00–07:59 นับเป็นของวันก่อน)
+function getDrivShiftAndDate(){
+  const now=getThaiNow(); const m=now.getHours()*60+now.getMinutes(); const d=new Date(now);
+  let shift;
+  if(m<8*60){shift="บ่าย/ดึก";d.setDate(d.getDate()-1);}
+  else if(m<16*60){shift="เช้า";}
+  else{shift="บ่าย/ดึก";}
+  return{shift,year:d.getFullYear(),month:d.getMonth(),day:d.getDate()};
 }
 function todayParts(){const t=getThaiNow();return{year:t.getFullYear(),month:t.getMonth(),day:t.getDate()};}
 function sanitizeKey(str){return str.replace(/[.#$/[\]/\s]/g,"_");}
@@ -2652,11 +2661,14 @@ export default function App(){
   const [view,setView]=useState("check");
   const [selYear,setSelYear]=useState(shiftYear); const [selMonth,setSelMonth]=useState(shiftMonth);
   const [selDay,setSelDay]=useState(shiftDay); const [selShift,setSelShift]=useState(autoShift);
-  // พขร. มีแค่ 2 เวร: เช้า กับ บ่าย/ดึก (เข้า 16:15 ออก 08:15 วันถัดไป) เปิดแอปช่วงบ่ายหรือดึกให้เลือก "บ่าย/ดึก" ให้เอง
+  // พขร. มีแค่ 2 เวร: เช้า 08:00–16:00 กับ บ่าย/ดึก 16:00–08:00 — เลือกเวรและวันที่ตามเวลาของ พขร. ให้เอง
   useEffect(()=>{
-    if(myRole==="driv"&&(selShift==="บ่าย"||selShift==="ดึก")) setSelShift("บ่าย/ดึก");
-    else if(myRole!=="driv"&&selShift==="บ่าย/ดึก") setSelShift(autoShift);
-  },[myRole,selShift,autoShift]);
+    if(myRole==="driv"){
+      const d=getDrivShiftAndDate(); setSelShift(d.shift); setSelYear(d.year); setSelMonth(d.month); setSelDay(d.day);
+    } else if(selShift==="บ่าย/ดึก"){
+      setSelShift(autoShift); setSelYear(shiftYear); setSelMonth(shiftMonth); setSelDay(shiftDay);
+    }
+  },[myRole]); // eslint-disable-line react-hooks/exhaustive-deps
   const [equipment,setEquipment]=useState(DEFAULT_EQUIPMENT);
   const [pinUnlocked,setPinUnlocked]=useState(()=>{const t=ls(PIN_SESSION_KEY,0);return t&&(Date.now()-t)<8*60*60*1000;});
 
@@ -2718,6 +2730,13 @@ export default function App(){
                     <button key={s} onClick={()=>{
                       const sd=getShiftAndDate();
                       setSelShift(s);
+                      if(myRole==="driv"){
+                        // พขร.: บ่าย/ดึก ช่วง 00:00–07:59 เป็นของวันก่อน, เวรอื่นใช้วันนี้
+                        const t=getThaiNow(); const y=new Date(t);
+                        if(s==="บ่าย/ดึก"&&t.getHours()<8) y.setDate(y.getDate()-1);
+                        setSelYear(y.getFullYear());setSelMonth(y.getMonth());setSelDay(y.getDate());
+                        return;
+                      }
                       // เวรดึกใช้วันเมื่อวาน ถ้าเวลาปัจจุบันอยู่ในช่วงเวรดึก
                       if(s==="ดึก"){
                         const now=getThaiNow(); const h=now.getHours(); const m=now.getMinutes();
